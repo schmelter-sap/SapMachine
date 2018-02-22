@@ -129,6 +129,7 @@ ifeq ($(OPENJDK_TARGET_OS), windows)
       $(EXTRACTED_INCLUDES_client) \
       $(ADDITIONAL_VARIANT_ARGS) \
       $(IGNORED_PLATFORMS_ARGS) \
+      -absoluteSrcInclude $(call FixPath, $(TOPDIR)/src/jdk.jdwp.agent/) \
       #
 
   VCPROJ_VARDEPS := $(PROJECT_CREATOR_CLASS) $(PROJECT_CREATOR_ARGS)
