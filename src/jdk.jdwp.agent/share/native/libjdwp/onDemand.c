@@ -25,6 +25,7 @@
 
 #include "util.h"
 #include "onDemand.h"
+#include "debugInit.h"
 #include "proc_md.h"
 
 #define ON_DEMAND_KEY "ondemand"
@@ -40,6 +41,13 @@ static jboolean enabled = JNI_FALSE;
 static jboolean initCalled = JNI_FALSE;
 static jrawMonitorID onDemandMonitor;
 static char* onDemandScript;
+static onDemandCurrentState = ON_DEMAND_DISABLED;
+static char onDemandHost[1024];
+static char onDemandOptions[2048];
+static jint onDemandPort = -1;
+static jboolean onDemandIsServer = JNI_FALSE;
+static jlong onDemandSessionId = 0;
+static jlong onDemandTimeout;
 
 static jboolean createScript(char* options) {
     if (strncmp(ON_DEMAND_KEY "=", options, strlen(ON_DEMAND_KEY "=")) != 0) {
@@ -119,6 +127,13 @@ static void runScript() {
     }
 }
 
+#ifdef _WIN32
+static DWORD runScriptWindows(void* dummy) {
+    runScript();
+    return 0;
+}
+#endif
+
 void onDemand_init(char* options, void* reserved) {
     if (initCalled) {
         ERROR_MESSAGE(("onDemand_init() already called"));
@@ -135,7 +150,9 @@ void onDemand_init(char* options, void* reserved) {
         enabled = JNI_TRUE;
         
         if (createScript(options)) {
-            runScript();
+#ifdef _WIN32
+            CreateThread(NULL, 0, runScriptWindows, NULL, 0, NULL);
+#endif
         }
     } else {
         LOG_MISC(("Debugging on demand is not enabled"));
@@ -144,6 +161,126 @@ void onDemand_init(char* options, void* reserved) {
     initCalled = JNI_TRUE;
 }
 
+char* onDemand_get_options() {
+    debugMonitorEnter(onDemandMonitor);
+    if (onDemandIsServer) {
+        if (strlen(onDemandHost) > 0) {
+            snprintf(onDemandOptions, sizeof(onDemandOptions), "transport=dt_socket,server=y,suspend=n,address=%s:%d,timeout=%d",
+                     onDemandHost, onDemandPort, onDemandTimeout);
+        } else {
+            snprintf(onDemandOptions, sizeof(onDemandOptions), "transport=dt_socket,server=y,suspend=n,address=%d,timeout=%d",
+                     onDemandPort, onDemandTimeout);
+        }
+    } else {
+        snprintf(onDemandOptions, sizeof(onDemandOptions), "transport=dt_socket,server=n,suspend=n,address=%s, %d,timeout=%d",
+                 onDemandHost, onDemandPort, onDemandTimeout);
+    }
+
+    debugMonitorExit(onDemandMonitor);
+
+    return onDemandOptions;
+}
+
 jboolean onDemand_isEnabled() {
     return enabled;
+}
+
+onDemandState onDemand_getState(jboolean* is_server, char* host, jint host_max_size, jint* port, jlong* session_id) {
+    onDemandState result;
+
+    debugMonitorEnter(onDemandMonitor);
+    result = onDemandCurrentState;
+
+    if (session_id) {
+        *session_id = onDemandSessionId;
+    }
+
+    if ((result == ON_DEMAND_STARTING) || (result == ON_DEMAND_WAITING_FOR_CONNECTION) || (result == ON_DEMAND_CONNECTED) || (result == ON_DEMAND_STOPPING)) {
+        *is_server = onDemandIsServer;
+        if (host && (host_max_size > 0)) {
+            snprintf(host, host_max_size, "%s", onDemandHost);
+            host[host_max_size - 1] = '\0'; // Windows does not terminate.
+        }
+        if (port) {
+            *port = onDemandPort;
+        }
+    } else {
+        if (host && (host_max_size > 0)) {
+            host[0] = '\0';
+        }
+        if (port) {
+            *port = -1;
+        }
+    }
+
+    debugMonitorExit(onDemandMonitor);
+
+    return result;
+}
+
+onDemandStartingError onDemand_startDebugging(jlong timeout, jboolean is_server, char const* host, jint port, jlong* session_id) {
+    onDemandStartingError result;
+
+    debugMonitorEnter(onDemandMonitor);
+
+    if (onDemandCurrentState != ON_DEMAND_INACTIVE) {
+        result = STARTING_ERROR_WRONG_STATE;
+    } else {
+        jlong newSessionId = onDemandSessionId + 1;
+
+        onDemandIsServer = is_server;
+        snprintf(onDemandHost, sizeof(onDemandHost), "%s", host);
+        onDemandHost[sizeof(onDemandHost) - 1] = '\0';
+        onDemandPort = port;
+        onDemandCurrentState = ON_DEMAND_STARTING;
+        onDemandSessionId = newSessionId;
+        *session_id = newSessionId;
+
+        debugMonitorNotifyAll(onDemandMonitor);
+
+        if (!debugInit_isInitComplete()) {
+
+        }
+
+        debugMonitorTimedWait(onDemandMonitor, timeout);
+
+        if ((onDemandCurrentState == ON_DEMAND_STARTING) && (newSessionId == onDemandSessionId)) {
+            result = STARTING_ERROR_TIMED_OUT;
+        } else {
+            result = STARTING_ERROR_OK;
+        }
+    }
+
+    debugMonitorExit(onDemandMonitor);
+
+    return result;
+}
+
+onDemandStoppingError onDemand_stopDebugging(jlong timeout, jlong session_id) {
+    onDemandStoppingError result;
+
+    debugMonitorEnter(onDemandMonitor);
+
+    if (session_id != onDemandSessionId) {
+        /* A new session is already there, so stopping worked! */
+        result = STOPPING_ERROR_OK;
+    } else if ((onDemandCurrentState != ON_DEMAND_CONNECTED) && (onDemandCurrentState != ON_DEMAND_STOPPING)) {
+        result = STOPPING_ERROR_WRONG_STATE;
+    } else {
+        /* TODO: Implement stopping.*/
+        onDemandCurrentState = ON_DEMAND_STOPPING;
+
+        debugMonitorNotifyAll(onDemandMonitor);
+        debugMonitorTimedWait(onDemandMonitor, timeout);
+
+        if ((session_id == onDemandSessionId) && (onDemandCurrentState == ON_DEMAND_STOPPING)) {
+            result = STARTING_ERROR_TIMED_OUT;
+        } else {
+            result = STARTING_ERROR_OK;
+        }
+    }
+
+    debugMonitorExit(onDemandMonitor);
+
+    return result;
 }
