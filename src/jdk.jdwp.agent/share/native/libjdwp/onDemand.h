@@ -27,15 +27,17 @@
 #define JDWP_ONDEMAND_H
 
 /* Internal API */
-void onDemand_init(char* options, void* reserved);
+void onDemand_init();
 void onDemand_notify_waiting_for_connection();
 void onDemand_notify_debugging();
 jboolean onDemand_wait_for_new_session();
 char* onDemand_get_options();
+jboolean onDemand_isEnabled();
 
 /* Exteneral API */
 typedef enum {
     ON_DEMAND_DISABLED,
+    ON_DEMAND_INITIAL,
     ON_DEMAND_INACTIVE,
     ON_DEMAND_STARTING,
     ON_DEMAND_WAITING_FOR_CONNECTION,
@@ -55,7 +57,6 @@ typedef enum {
     STOPPING_ERROR_TIMED_OUT
 } onDemandStoppingError;
 
-jboolean onDemand_isEnabled();
 onDemandState onDemand_getState(jboolean* is_server, char* host, jint host_max_size, jint* port, jlong* session_id);
 onDemandStartingError onDemand_startDebugging(jlong timeout, jboolean is_server, char const* host, jint port, jlong* session_id);
 onDemandStoppingError onDemand_stopDebugging(jlong timeout, jlong session_id);

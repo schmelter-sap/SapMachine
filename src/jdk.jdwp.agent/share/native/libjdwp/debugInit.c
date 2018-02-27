@@ -268,11 +268,8 @@ DEF_Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
         forceExit(1); /* Kill entire process, no core dump wanted */
     }
 
-    onDemand_init(options, reserved);
-
-
-    /* Parse input options (when not using on demand debugging) */
-    if (!onDemand_isEnabled() && !parseOptions(options)) {
+    /* Parse input options */
+    if (!parseOptions(options)) {
         /* No message necessary, should have been printed out already */
         /* Do not let VM get a fatal error, we don't want a core dump here. */
         forceExit(1); /* Kill entire process, no core dump wanted */
@@ -351,36 +348,33 @@ DEF_Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
     /* Initialize event number mapping tables */
     eventIndexInit();
 
-    /* Check for debugging on demand and don't register the notifications if enabled.*/
-    if (!onDemand_isEnabled()) {
-        /* Set the initial JVMTI event notifications */
-        error = set_event_notification(JVMTI_ENABLE, EI_VM_DEATH);
+    /* Set the initial JVMTI event notifications */
+    error = set_event_notification(JVMTI_ENABLE, EI_VM_DEATH);
+    if (error != JVMTI_ERROR_NONE) {
+        return JNI_ERR;
+    }
+    error = set_event_notification(JVMTI_ENABLE, EI_VM_INIT);
+    if (error != JVMTI_ERROR_NONE) {
+        return JNI_ERR;
+    }
+    if (initOnUncaught || (initOnException != NULL)) {
+        error = set_event_notification(JVMTI_ENABLE, EI_EXCEPTION);
         if (error != JVMTI_ERROR_NONE) {
             return JNI_ERR;
         }
-        error = set_event_notification(JVMTI_ENABLE, EI_VM_INIT);
-        if (error != JVMTI_ERROR_NONE) {
-            return JNI_ERR;
-        }
-        if (initOnUncaught || (initOnException != NULL)) {
-            error = set_event_notification(JVMTI_ENABLE, EI_EXCEPTION);
-            if (error != JVMTI_ERROR_NONE) {
-                return JNI_ERR;
-            }
-        }
+    }
 
-        /* Set callbacks just for 3 functions */
-        (void) memset(&(gdata->callbacks), 0, sizeof(gdata->callbacks));
-        gdata->callbacks.VMInit = &cbEarlyVMInit;
-        gdata->callbacks.VMDeath = &cbEarlyVMDeath;
-        gdata->callbacks.Exception = &cbEarlyException;
-        error = JVMTI_FUNC_PTR(gdata->jvmti, SetEventCallbacks)
-            (gdata->jvmti, &(gdata->callbacks), sizeof(gdata->callbacks));
-        if (error != JVMTI_ERROR_NONE) {
-            ERROR_MESSAGE(("JDWP unable to set JVMTI event callbacks: %s(%d)",
-                           jvmtiErrorText(error), error));
-            return JNI_ERR;
-        }
+    /* Set callbacks just for 3 functions */
+    (void) memset(&(gdata->callbacks), 0, sizeof(gdata->callbacks));
+    gdata->callbacks.VMInit = &cbEarlyVMInit;
+    gdata->callbacks.VMDeath = &cbEarlyVMDeath;
+    gdata->callbacks.Exception = &cbEarlyException;
+    error = JVMTI_FUNC_PTR(gdata->jvmti, SetEventCallbacks)
+        (gdata->jvmti, &(gdata->callbacks), sizeof(gdata->callbacks));
+    if (error != JVMTI_ERROR_NONE) {
+        ERROR_MESSAGE(("JDWP unable to set JVMTI event callbacks: %s(%d)",
+                       jvmtiErrorText(error), error));
+        return JNI_ERR;
     }
 
     LOG_MISC(("OnLoad: DONE"));
@@ -570,6 +564,11 @@ startTransport(void *item, void *arg)
     EnumerateArg *enumArg = arg;
     jdwpError serror;
 
+    if (onDemand_isEnabled()) {
+        onDemand_wait_for_new_session();
+        // TODO: Set arguments.
+    }
+
     LOG_MISC(("Begin startTransport"));
     serror = transport_startTransport(enumArg->isServer, transport->name,
                                       transport->address, transport->timeout,
@@ -716,7 +715,6 @@ initialize(JNIEnv *env, jthread thread, EventIndex triggering_ei)
     debugLoop_initialize();
 
     initMonitor = debugMonitorCreate("JDWP Initialization Monitor");
-
 
     /*
      * Initialize transports
@@ -1236,6 +1234,16 @@ parseOptions(char *options)
             if ( !get_boolean(&str, &useStandardAlloc) ) {
                 goto syntax_error;
             }
+        } else if (strcmp(buf, "ondemand") == 0) {
+            jboolean onDemand;
+
+            if (!get_boolean(&str, &onDemand)) {
+                goto syntax_error;
+            }
+
+            if (onDemand) {
+                onDemand_init();
+            }
         } else {
             goto syntax_error;
         }
@@ -1262,7 +1270,7 @@ parseOptions(char *options)
     }
 
 
-    if (!isServer) {
+    if (!isServer && !onDemand_isEnabled()) {
         jboolean specified = bagEnumerateOver(transports, checkAddress, NULL);
         if (!specified) {
             /* message already printed */
