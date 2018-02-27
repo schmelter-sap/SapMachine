@@ -50,30 +50,29 @@ static jlong onDemandSessionId = 0;
 static jlong onDemandTimeout;
 
 static jboolean createScript(char* options) {
-    if (strncmp(ON_DEMAND_KEY "=", options, strlen(ON_DEMAND_KEY "=")) != 0) {
-        return JNI_FALSE;
-    }
-
-    onDemandScript = (char*) jvmtiAllocate((jint) (strlen(options) - strlen(ON_DEMAND_KEY "=") + 1));
+    onDemandScript = (char*) jvmtiAllocate((jint) (strlen(options) + 1));
 
     if (onDemandScript) {
-        strcpy(options + strlen(ON_DEMAND_KEY "="), onDemandScript);
+        strcpy(onDemandScript, options);
         return JNI_TRUE;
     }
 
     return JNI_FALSE;
 }
 
-static void runScript() {
+static void runScript(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg) {
     char* p = onDemandScript;
+    char *np;
     char* address;
     int port;
 
     while (*p) {
         char* e = strchr(p, ',');
+        np = e + 1;
 
         if (e == NULL) {
             e = p + strlen(p);
+            np = e;
         }
 
         if (strncmp(WAIT_KEY, p, strlen(WAIT_KEY)) == 0) {
@@ -82,6 +81,7 @@ static void runScript() {
             sleep(timeout);
         } else if (strncmp(OPEN_SERVER, p, strlen(OPEN_SERVER)) == 0) {
             char* split = strchr(p, ':');
+            jlong session_id;
 
             if (split == NULL) {
                 ERROR_MESSAGE(("Missing server port in arg %*s for debugging on demand", (int) (e - p), p));
@@ -92,8 +92,11 @@ static void runScript() {
             address[split - p - strlen(OPEN_SERVER)] = '\0';
             port = atoi(split + 1);
             LOG_MISC(("Starting server for %s:%d", address, port));
+            onDemand_startDebugging(10000, JNI_TRUE, address, port, &session_id);
+            LOG_MISC(("Starting server for %s:%d got session id %lld", address, port, session_id));
         } else if (strncmp(OPEN_CLIENT, p, strlen(OPEN_CLIENT)) == 0) {
             char* split = strchr(p, ':');
+            jlong session_id;
 
             if (split == NULL) {
                 ERROR_MESSAGE(("Missing client port in arg %*s for debugging on demand", (int) (e - p), p));
@@ -104,6 +107,8 @@ static void runScript() {
             address[split - p - strlen(OPEN_CLIENT)] = '\0';
             port = atoi(split + 1);
             LOG_MISC(("Starting client for %s:%d", address, port));
+            onDemand_startDebugging(10000, JNI_FALSE, address, port, &session_id);
+            LOG_MISC(("Starting client for %s:%d got session id %lld", address, port, session_id));
         } else if (strncmp(WAIT_STATE, p, strlen(WAIT_STATE)) == 0) {
             char* split = strchr(p, ':');
 
@@ -119,50 +124,105 @@ static void runScript() {
         } else if (strncmp(STOP_DEBUGGING, p, strlen(STOP_DEBUGGING)) == 0) {
             LOG_MISC(("Stooping debugging"));
         } else if (strncmp(PRINT_STATE, p, strlen(PRINT_STATE)) == 0) {
-            LOG_MISC(("Printing debugging on demand state"));
+            char buf[1024];
+            jint port;
+            jlong session_id;
+            jboolean is_server;
+            onDemandState state = onDemand_getState(&is_server, buf, (jint) sizeof(buf), &port, &session_id);
+
+            printf("Debugging state %d (server: %s, host: %s, port: %d\n", state, is_server ? "true" : " false", buf, port);
         } else {
             ERROR_MESSAGE(("Cannot parse arg %*s for debugging on demand", (int) (e - p), p));
             return;
         }
+
+        p = np;
     }
 }
 
-#ifdef _WIN32
-static DWORD runScriptWindows(void* dummy) {
-    runScript();
-    return 0;
-}
-#endif
-
-void onDemand_init(char* options, void* reserved) {
+void onDemand_init() {
     if (initCalled) {
         ERROR_MESSAGE(("onDemand_init() already called"));
         return;
     }
 
-    setup_logging("jdwp.log", (unsigned int) 0xffffffff);
+    onDemandScript = getenv("_JAVA_JDWP_ON_DEMAND_SCRIPT");
+    enabled = JNI_TRUE;
+    onDemandMonitor = debugMonitorCreate("JDWP Initialization Monitor");
+    onDemandCurrentState = ON_DEMAND_INITIAL;
+    LOG_MISC(("Debugging on demand enabled"));
 
-    LOG_MISC(("Debugging on demand got options %s", options));
-
-    if (strncmp(ON_DEMAND_KEY, options, strlen(ON_DEMAND_KEY)) == 0) {
-        LOG_MISC(("Debugging on demand is enabled!"));
-        onDemandMonitor = debugMonitorCreate("JDWP Initialization Monitor");
-        enabled = JNI_TRUE;
-        
-        if (createScript(options)) {
-#ifdef _WIN32
-            CreateThread(NULL, 0, runScriptWindows, NULL, 0, NULL);
-#endif
-        }
-    } else {
-        LOG_MISC(("Debugging on demand is not enabled"));
+    if (onDemandScript != NULL) {
+        LOG_MISC(("Debugging on demand got script %s", onDemandScript));
     }
 
     initCalled = JNI_TRUE;
 }
 
+void onDemand_notify_waiting_for_connection() {
+    LOG_MISC(("Notifying debugging connection is (about to be) set up."));
+
+    debugMonitorEnter(onDemandMonitor);
+    if (onDemandCurrentState != ON_DEMAND_STARTING) {
+        LOG_MISC(("Unexpected state %d when waiting for connection", onDemandCurrentState));
+    } else {
+        onDemandCurrentState = ON_DEMAND_WAITING_FOR_CONNECTION;
+        debugMonitorNotifyAll(onDemandMonitor);
+    }
+
+    debugMonitorExit(onDemandMonitor);
+}
+
+void onDemand_notify_debugging() {
+    LOG_MISC(("Notifying debugging session started."));
+
+    debugMonitorEnter(onDemandMonitor);
+    if (onDemandCurrentState != ON_DEMAND_WAITING_FOR_CONNECTION) {
+        LOG_MISC(("Unexpected state %d when starting debugging", onDemandCurrentState));
+    } else {
+        onDemandCurrentState = ON_DEMAND_CONNECTED;
+        debugMonitorNotifyAll(onDemandMonitor);
+    }
+
+    debugMonitorExit(onDemandMonitor);
+}
+
+jboolean onDemand_wait_for_new_session() {
+    LOG_MISC(("Waiting for new debugging session ..."));
+    jboolean result = JNI_FALSE;
+
+    debugMonitorEnter(onDemandMonitor);
+
+    if ((onDemandCurrentState != ON_DEMAND_INITIAL) && (onDemandCurrentState != ON_DEMAND_STOPPING)) {
+        LOG_MISC(("Invalid state %d to wait for new session", onDemandCurrentState));
+    } else {
+        if (onDemandCurrentState == ON_DEMAND_INITIAL) {
+            spawnNewThread(runScript, NULL, "on demand script thread");
+        }
+
+        onDemandCurrentState = ON_DEMAND_INACTIVE;
+        debugMonitorNotifyAll(onDemandMonitor);
+
+        while (onDemandCurrentState == ON_DEMAND_INACTIVE) {
+            debugMonitorWait(onDemandMonitor);
+        }
+
+        if (onDemandCurrentState == ON_DEMAND_STARTING) {
+            LOG_MISC(("Starting up debugging on demand session ..."));
+            result = JNI_TRUE;
+        } else {
+            LOG_MISC(("Invalid state %d for starting debugging on demand session"));
+        }
+    }
+
+    debugMonitorExit(onDemandMonitor);
+
+    return result;
+}
+
 char* onDemand_get_options() {
     debugMonitorEnter(onDemandMonitor);
+
     if (onDemandIsServer) {
         if (strlen(onDemandHost) > 0) {
             snprintf(onDemandOptions, sizeof(onDemandOptions), "transport=dt_socket,server=y,suspend=n,address=%s:%d,timeout=%d",
