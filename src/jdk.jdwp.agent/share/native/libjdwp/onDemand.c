@@ -34,6 +34,7 @@
 #define OPEN_SERVER "openServer"
 #define OPEN_CLIENT "openClient"
 #define STOP_DEBUGGING "stop"
+#define PRINT_CONFIG "printConfig"
 #define PRINT_STATE "printState"
 #define WAIT_STATE "waitState"
 
@@ -42,23 +43,15 @@ static jboolean initCalled = JNI_FALSE;
 static jrawMonitorID onDemandMonitor;
 static char* onDemandScript;
 static onDemandCurrentState = ON_DEMAND_DISABLED;
-static char onDemandHost[1024];
-static char onDemandOptions[2048];
-static jint onDemandPort = -1;
+static char onDemandTransportName[128];
 static jboolean onDemandIsServer = JNI_FALSE;
+static char onDemandAddress[1024];
+static jboolean hasServerOverride = JNI_FALSE;
+static jboolean onDemandIsServerOverride = JNI_FALSE;
+static jboolean hasAddressOverride = JNI_FALSE;
+static char onDemandAddressOverride[1024];
 static jlong onDemandSessionId = 0;
 static jlong onDemandTimeout;
-
-static jboolean createScript(char* options) {
-    onDemandScript = (char*) jvmtiAllocate((jint) (strlen(options) + 1));
-
-    if (onDemandScript) {
-        strcpy(onDemandScript, options);
-        return JNI_TRUE;
-    }
-
-    return JNI_FALSE;
-}
 
 static void runScript(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg) {
     char* p = onDemandScript;
@@ -80,35 +73,17 @@ static void runScript(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg) {
             LOG_MISC(("Waiting %d seconds in debugging on demand script", timeout));
             sleep(timeout);
         } else if (strncmp(OPEN_SERVER, p, strlen(OPEN_SERVER)) == 0) {
-            char* split = strchr(p, ':');
             jlong session_id;
-
-            if (split == NULL) {
-                ERROR_MESSAGE(("Missing server port in arg %*s for debugging on demand", (int) (e - p), p));
-                return;
-            }
-
             char* address = p + strlen(OPEN_SERVER);
-            address[split - p - strlen(OPEN_SERVER)] = '\0';
-            port = atoi(split + 1);
-            LOG_MISC(("Starting server for %s:%d", address, port));
-            onDemand_startDebugging(10000, JNI_TRUE, address, port, &session_id);
-            LOG_MISC(("Starting server for %s:%d got session id %lld", address, port, session_id));
+            LOG_MISC(("Starting server for %s", address));
+            onDemand_startDebugging(10000, JNI_TRUE, address, &session_id);
+            LOG_MISC(("Starting server for %s got session id %lld", address, session_id));
         } else if (strncmp(OPEN_CLIENT, p, strlen(OPEN_CLIENT)) == 0) {
-            char* split = strchr(p, ':');
             jlong session_id;
-
-            if (split == NULL) {
-                ERROR_MESSAGE(("Missing client port in arg %*s for debugging on demand", (int) (e - p), p));
-                return;
-            }
-
             char* address = p + strlen(OPEN_CLIENT);
-            address[split - p - strlen(OPEN_CLIENT)] = '\0';
-            port = atoi(split + 1);
-            LOG_MISC(("Starting client for %s:%d", address, port));
-            onDemand_startDebugging(10000, JNI_FALSE, address, port, &session_id);
-            LOG_MISC(("Starting client for %s:%d got session id %lld", address, port, session_id));
+            LOG_MISC(("Starting client for %s", address, port));
+            onDemand_startDebugging(10000, JNI_FALSE, address, &session_id);
+            LOG_MISC(("Starting client for %s got session id %lld", address, session_id));
         } else if (strncmp(WAIT_STATE, p, strlen(WAIT_STATE)) == 0) {
             char* split = strchr(p, ':');
 
@@ -123,14 +98,30 @@ static void runScript(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg) {
             LOG_MISC(("Waiting for state %s with timeout %d", address, port));
         } else if (strncmp(STOP_DEBUGGING, p, strlen(STOP_DEBUGGING)) == 0) {
             LOG_MISC(("Stooping debugging"));
+        } else if (strncmp(PRINT_CONFIG, p, strlen(PRINT_CONFIG)) == 0) {
+            char address[1024];
+            jboolean is_server;
+            jboolean has_is_server_override;
+            jboolean has_address_override;
+            char const* transport = onDemand_getConfig(&has_is_server_override, &is_server, &has_address_override, address, sizeof(address));
+
+            printf("Debugging config:\n");
+            printf("Transport: %s\n", transport);
+
+            if (has_is_server_override) {
+                printf("Is server override: %s\n", is_server ? "server": "client");
+            }
+
+            if (has_address_override) {
+                printf("Address override: %s\n", address);
+            }
         } else if (strncmp(PRINT_STATE, p, strlen(PRINT_STATE)) == 0) {
             char buf[1024];
-            jint port;
             jlong session_id;
             jboolean is_server;
-            onDemandState state = onDemand_getState(&is_server, buf, (jint) sizeof(buf), &port, &session_id);
+            onDemandState state = onDemand_getState(&is_server, buf, (jint) sizeof(buf), &session_id);
 
-            printf("Debugging state %d (server: %s, host: %s, port: %d\n", state, is_server ? "true" : " false", buf, port);
+            printf("Debugging state %d (server: %s, address: %s)\n", state, is_server ? "true" : " false", buf);
         } else {
             ERROR_MESSAGE(("Cannot parse arg %*s for debugging on demand", (int) (e - p), p));
             return;
@@ -138,6 +129,27 @@ static void runScript(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg) {
 
         p = np;
     }
+}
+
+void onDemand_setTransport(char const* transport) {
+    if (transport == NULL) {
+        ERROR_MESSAGE(("transport is not specified"));
+        return;
+    }
+
+    snprintf(onDemandTransportName, sizeof(onDemandTransportName), "%s", transport);
+    onDemandTransportName[sizeof(onDemandTransportName) - 1] = '\0';
+}
+
+void onDemand_limitServer(jboolean isServer) {
+    hasServerOverride = JNI_TRUE;
+    onDemandIsServer = isServer;
+}
+
+void onDemand_limitAddress(char const* address) {
+    hasAddressOverride = JNI_TRUE;
+    snprintf(onDemandAddress, sizeof(onDemandAddress), "%s", address);
+    onDemandAddress[sizeof(onDemandAddress) - 1] = '\0';
 }
 
 void onDemand_init() {
@@ -159,7 +171,7 @@ void onDemand_init() {
     initCalled = JNI_TRUE;
 }
 
-void onDemand_notify_waiting_for_connection() {
+void onDemand_notifyWaitingForConnection() {
     LOG_MISC(("Notifying debugging connection is (about to be) set up."));
 
     debugMonitorEnter(onDemandMonitor);
@@ -173,7 +185,7 @@ void onDemand_notify_waiting_for_connection() {
     debugMonitorExit(onDemandMonitor);
 }
 
-void onDemand_notify_debugging() {
+void onDemand_notifyDebuggingStarted() {
     LOG_MISC(("Notifying debugging session started."));
 
     debugMonitorEnter(onDemandMonitor);
@@ -187,7 +199,7 @@ void onDemand_notify_debugging() {
     debugMonitorExit(onDemandMonitor);
 }
 
-jboolean onDemand_wait_for_new_session() {
+jboolean onDemand_waitForNewSession() {
     LOG_MISC(("Waiting for new debugging session ..."));
     jboolean result = JNI_FALSE;
 
@@ -197,7 +209,9 @@ jboolean onDemand_wait_for_new_session() {
         LOG_MISC(("Invalid state %d to wait for new session", onDemandCurrentState));
     } else {
         if (onDemandCurrentState == ON_DEMAND_INITIAL) {
-            spawnNewThread(runScript, NULL, "on demand script thread");
+            if (onDemandScript) {
+                spawnNewThread(runScript, NULL, "on demand script thread");
+            }
         }
 
         onDemandCurrentState = ON_DEMAND_INACTIVE;
@@ -220,57 +234,56 @@ jboolean onDemand_wait_for_new_session() {
     return result;
 }
 
-char* onDemand_get_options() {
-    debugMonitorEnter(onDemandMonitor);
-
-    if (onDemandIsServer) {
-        if (strlen(onDemandHost) > 0) {
-            snprintf(onDemandOptions, sizeof(onDemandOptions), "transport=dt_socket,server=y,suspend=n,address=%s:%d,timeout=%d",
-                     onDemandHost, onDemandPort, onDemandTimeout);
-        } else {
-            snprintf(onDemandOptions, sizeof(onDemandOptions), "transport=dt_socket,server=y,suspend=n,address=%d,timeout=%d",
-                     onDemandPort, onDemandTimeout);
-        }
-    } else {
-        snprintf(onDemandOptions, sizeof(onDemandOptions), "transport=dt_socket,server=n,suspend=n,address=%s, %d,timeout=%d",
-                 onDemandHost, onDemandPort, onDemandTimeout);
-    }
-
-    debugMonitorExit(onDemandMonitor);
-
-    return onDemandOptions;
-}
-
 jboolean onDemand_isEnabled() {
     return enabled;
 }
 
-onDemandState onDemand_getState(jboolean* is_server, char* host, jint host_max_size, jint* port, jlong* session_id) {
+char* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server, jboolean* has_address_override, char* address, jint address_max_size) {
+    debugMonitorEnter(onDemandMonitor);
+
+    if (has_is_server_override) {
+        *has_is_server_override = hasServerOverride;
+    }
+
+    if (is_server) {
+        *is_server = onDemandIsServerOverride;
+    }
+
+    if (has_address_override) {
+        *has_address_override = hasAddressOverride;
+    }
+
+    if (address && (address_max_size > 0)) {
+        if (hasAddressOverride) {
+            snprintf(address, address_max_size, "%s", onDemandAddressOverride);
+            address[address_max_size - 1] = '\0'; // Windows does not terminate.
+        } else {
+            address[0] = '\0';
+        }
+    }
+
+    debugMonitorExit(onDemandMonitor);
+
+    return onDemandTransportName;
+}
+
+onDemandState onDemand_getState(jboolean* is_server, char* address, jint address_max_size, jlong* session_id) {
     onDemandState result;
 
     debugMonitorEnter(onDemandMonitor);
     result = onDemandCurrentState;
 
-    if (session_id) {
-        *session_id = onDemandSessionId;
+    if (is_server) {
+        *is_server = onDemandIsServer;
     }
 
-    if ((result == ON_DEMAND_STARTING) || (result == ON_DEMAND_WAITING_FOR_CONNECTION) || (result == ON_DEMAND_CONNECTED) || (result == ON_DEMAND_STOPPING)) {
-        *is_server = onDemandIsServer;
-        if (host && (host_max_size > 0)) {
-            snprintf(host, host_max_size, "%s", onDemandHost);
-            host[host_max_size - 1] = '\0'; // Windows does not terminate.
-        }
-        if (port) {
-            *port = onDemandPort;
-        }
-    } else {
-        if (host && (host_max_size > 0)) {
-            host[0] = '\0';
-        }
-        if (port) {
-            *port = -1;
-        }
+    if (address && (address_max_size > 0)) {
+        snprintf(address, address_max_size, "%s", onDemandAddress);
+        address[address_max_size - 1] = '\0'; // Windows does not terminate.
+    }
+
+    if (session_id) {
+        *session_id = onDemandSessionId;
     }
 
     debugMonitorExit(onDemandMonitor);
@@ -278,7 +291,7 @@ onDemandState onDemand_getState(jboolean* is_server, char* host, jint host_max_s
     return result;
 }
 
-onDemandStartingError onDemand_startDebugging(jlong timeout, jboolean is_server, char const* host, jint port, jlong* session_id) {
+onDemandStartingError onDemand_startDebugging(jlong timeout, jboolean is_server, char const* address, jlong* session_id) {
     onDemandStartingError result;
 
     debugMonitorEnter(onDemandMonitor);
@@ -289,9 +302,8 @@ onDemandStartingError onDemand_startDebugging(jlong timeout, jboolean is_server,
         jlong newSessionId = onDemandSessionId + 1;
 
         onDemandIsServer = is_server;
-        snprintf(onDemandHost, sizeof(onDemandHost), "%s", host);
-        onDemandHost[sizeof(onDemandHost) - 1] = '\0';
-        onDemandPort = port;
+        snprintf(onDemandAddress, sizeof(onDemandAddress), "%s", address);
+        onDemandAddress[sizeof(onDemandAddress) - 1] = '\0';
         onDemandCurrentState = ON_DEMAND_STARTING;
         onDemandSessionId = newSessionId;
         *session_id = newSessionId;

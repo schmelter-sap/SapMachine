@@ -557,6 +557,8 @@ typedef struct EnumerateArg {
     jint startCount;
 } EnumerateArg;
 
+static char onDemandAddress[1024];
+
 static jboolean
 startTransport(void *item, void *arg)
 {
@@ -565,8 +567,8 @@ startTransport(void *item, void *arg)
     jdwpError serror;
 
     if (onDemand_isEnabled()) {
-        onDemand_wait_for_new_session();
-        // TODO: Set arguments.
+        onDemand_waitForNewSession();
+        onDemand_getState(&enumArg->isServer, transport->address, sizeof(onDemandAddress), NULL);
     }
 
     LOG_MISC(("Begin startTransport"));
@@ -1090,6 +1092,7 @@ parseOptions(char *options)
             currentTransport->allow = NULL;
             currentTransport->timeout = 0L;
             current += strlen(current) + 1;
+            onDemand_setTransport(currentTransport->name);
         } else if (strcmp(buf, "address") == 0) {
             if (currentTransport == NULL) {
                 errmsg = "address specified without transport";
@@ -1101,6 +1104,7 @@ parseOptions(char *options)
             }
             currentTransport->address = current;
             current += strlen(current) + 1;
+            onDemand_limitAddress(currentTransport->address);
         } else if (strcmp(buf, "allow") == 0) {
             if (currentTransport == NULL) {
                 errmsg = "allow specified without transport";
@@ -1214,6 +1218,7 @@ parseOptions(char *options)
             if ( !get_boolean(&str, &isServer) ) {
                 goto syntax_error;
             }
+            onDemand_limitServer(isServer);
         } else if ( strcmp(buf, "strict")==0 ) { /* Obsolete, but accept it */
             if ( !get_boolean(&str, &isStrict) ) {
                 goto syntax_error;
