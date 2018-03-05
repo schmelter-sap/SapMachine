@@ -27,11 +27,13 @@
 #define JDWP_ONDEMAND_H
 
 /* Internal API */
+void onDemand_limitServer(jboolean isServer);
+void onDemand_limitAddress(char const* address);
+void onDemand_setTransport(char const* transport);
 void onDemand_init();
-void onDemand_notify_waiting_for_connection();
-void onDemand_notify_debugging();
-jboolean onDemand_wait_for_new_session();
-char* onDemand_get_options();
+void onDemand_notifyWaitingForCnnection();
+void onDemand_notifyDebuggingStarted();
+jboolean onDemand_waitForNewSession();
 jboolean onDemand_isEnabled();
 
 /* Exteneral API */
@@ -57,8 +59,9 @@ typedef enum {
     STOPPING_ERROR_TIMED_OUT
 } onDemandStoppingError;
 
-onDemandState onDemand_getState(jboolean* is_server, char* host, jint host_max_size, jint* port, jlong* session_id);
-onDemandStartingError onDemand_startDebugging(jlong timeout, jboolean is_server, char const* host, jint port, jlong* session_id);
+char* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server, jboolean* has_address_override, char* address, jint address_max_size);
+onDemandState onDemand_getState(jboolean* is_server, char* address, jint address_max_size, jlong* session_id);
+onDemandStartingError onDemand_startDebugging(jlong timeout, jboolean is_server, char const* address, jlong* session_id);
 onDemandStoppingError onDemand_stopDebugging(jlong timeout, jlong session_id);
 
 #endif
