@@ -568,7 +568,9 @@ startTransport(void *item, void *arg)
 
     if (onDemand_isEnabled()) {
         onDemand_waitForNewSession();
-        onDemand_getState(&enumArg->isServer, transport->address, sizeof(onDemandAddress), NULL);
+        transport->address = onDemandAddress;
+        onDemand_getState(&enumArg->isServer, onDemandAddress, sizeof(onDemandAddress), NULL);
+        transport->timeout = onDemand_getTimeout();
     }
 
     LOG_MISC(("Begin startTransport"));
@@ -667,6 +669,11 @@ jniFatalError(JNIEnv *env, const char *msg, jvmtiError error, int exit_code)
     forceExit(exit_code);
 }
 
+void debugInit_initForOnDemand(JNIEnv *env, jthread thread) {
+    initialize(env, thread, EI_VM_INIT);
+    vmInitialized = JNI_TRUE;
+}
+
 /*
  * Initialize debugger back end modules
  */
@@ -742,6 +749,10 @@ initialize(JNIEnv *env, jthread thread, EventIndex triggering_ei)
     eventHandler_initialize(currentSessionID);
 
     signalInitComplete();
+
+    if (onDemand_isEnabled()) {
+        return;
+    }
 
     transport_waitForConnection();
 
@@ -1247,6 +1258,7 @@ parseOptions(char *options)
             }
 
             if (onDemand) {
+                initOnStartup = JNI_FALSE;
                 onDemand_init();
             }
         } else {
@@ -1287,6 +1299,11 @@ parseOptions(char *options)
      * The user has selected to wait for an exception before init happens
      */
     if ((initOnException != NULL) || (initOnUncaught)) {
+        if (onDemand_isEnabled()) {
+            errmsg = "Debugging on demand is not compatible with using the onthrow or onuncaught suboptions";
+            goto bad_option_with_errmsg;
+        }
+
         initOnStartup = JNI_FALSE;
 
         if (launchOnInit == NULL) {

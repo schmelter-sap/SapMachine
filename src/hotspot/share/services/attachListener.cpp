@@ -44,7 +44,10 @@
 #include "utilities/debug.hpp"
 #include "utilities/formatBuffer.hpp"
 
+#include "jni.h"
+
 volatile bool AttachListener::_initialized;
+
 
 // Implementation of "properties" command.
 //

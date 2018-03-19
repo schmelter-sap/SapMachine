@@ -34,6 +34,7 @@ jboolean debugInit_isInitComplete(void);
  */
 char *debugInit_launchOnInit(void);
 jboolean debugInit_suspendOnInit(void);
+void debugInit_initForOnDemand(JNIEnv *env, jthread thread);
 
 void debugInit_reset(JNIEnv *env);
 void debugInit_exit(jvmtiError, const char *);
