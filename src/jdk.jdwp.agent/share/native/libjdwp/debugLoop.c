@@ -32,7 +32,6 @@
 #include "outStream.h"
 #include "threadControl.h"
 
-
 static void JNICALL reader(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg);
 static void enqueue(jdwpPacket *p);
 static jboolean dequeue(jdwpPacket *p);

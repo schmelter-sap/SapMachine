@@ -867,4 +867,67 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class DebugOnDemandInfoDCmd : public DCmd {
+public:
+  DebugOnDemandInfoDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "DoD.info";
+  }
+  static const char* description() {
+    return "Prints the information about the debugging on demand state";
+  }
+  static const char* impact() {
+    return "Low";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = { "java.lang.management.ManagementPermission",
+      "monitor", NULL };
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+class DebugOnDemandStartDCmd : public DCmd {
+public:
+  DebugOnDemandStartDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "DoD.start";
+  }
+  static const char* description() {
+    return "Starts debugging the VM.";
+  }
+  static const char* impact() {
+    return "High: Switches the VM into debug mode.";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = { "java.lang.management.ManagementPermission",
+      "monitor", NULL };
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+class DebugOnDemandStopDCmd : public DCmd {
+public:
+  DebugOnDemandStopDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "DoD.stop";
+  }
+  static const char* description() {
+    return "Stops debugging the VM.";
+  }
+  static const char* impact() {
+    return "Low";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = { "java.lang.management.ManagementPermission",
+      "monitor", NULL };
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 #endif // SHARE_VM_SERVICES_DIAGNOSTICCOMMAND_HPP

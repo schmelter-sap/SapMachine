@@ -28,6 +28,7 @@
 #include "transport.h"
 #include "debugLoop.h"
 #include "sys.h"
+#include "onDemand.h"
 
 static jdwpTransportEnv *transport = NULL;
 static unsigned transportVersion = JDWPTRANSPORT_VERSION_1_0;
@@ -293,6 +294,7 @@ connectionInitiated(jdwpTransportEnv *t)
     debugMonitorExit(listenerLock);
 
     if (isValid) {
+        onDemand_notifyDebuggingStarted();
         debugLoop_run();
     }
 
@@ -352,7 +354,11 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
          */
         printLastError(t, rc);
         (*t)->StopListening(t);
-        EXIT_ERROR(JVMTI_ERROR_NONE, "could not connect, timeout or fatal error");
+        if (!onDemand_isEnabled()) {
+            EXIT_ERROR(JVMTI_ERROR_NONE, "could not connect, timeout or fatal error");
+        } else {
+            debugInit_reset(getEnv());
+        }
     } else {
         (*t)->StopListening(t);
         connectionInitiated(t);
@@ -365,6 +371,22 @@ static void JNICALL
 attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
 {
     TransportInfo *info = (TransportInfo*)(void*)arg;
+
+    if (onDemand_isEnabled()) {
+        jdwpTransportEnv *trans = info->transport;
+        jint err = (*trans)->Attach(trans, info->address, info->timeout, 0);
+        if (err != JDWPTRANSPORT_ERROR_NONE) {
+            printLastError(trans, err);
+            /* The name, address and allowed_peers fields in 'info'
+            * are not allocated in the non-server case so
+            * they do not need to be freed. */
+            // TODO: check this.
+            jvmtiDeallocate(info);
+            (*trans)->StopListening(trans);
+            debugInit_reset(getEnv());
+            return;
+        }
+    }
 
     LOG_MISC(("Begin attach thread"));
     connectionInitiated(info->transport);
@@ -595,20 +617,25 @@ handleError:
          * is currently supported only in server mode.
          */
 
-        /*
-         * If we're connecting to another process, there shouldn't be
-         * any concurrent listens, so its ok if we block here in this
-         * thread, waiting for the attach to finish.
-         */
-         err = (*trans)->Attach(trans, address, timeout, 0);
-         if (err != JDWPTRANSPORT_ERROR_NONE) {
-             printLastError(trans, err);
-             serror = JDWP_ERROR(TRANSPORT_INIT);
-             /* The name, address and allowed_peers fields in 'info'
-              * are not allocated in the non-server case so
-              * they do not need to be freed. */
-             jvmtiDeallocate(info);
-             return serror;
+         if (!onDemand_isEnabled()) {
+             /*
+             * If we're connecting to another process, there shouldn't be
+             * any concurrent listens, so its ok if we block here in this
+             * thread, waiting for the attach to finish.
+             */
+             err = (*trans)->Attach(trans, address, timeout, 0);
+             if (err != JDWPTRANSPORT_ERROR_NONE) {
+                 printLastError(trans, err);
+                 serror = JDWP_ERROR(TRANSPORT_INIT);
+                 /* The name, address and allowed_peers fields in 'info'
+                 * are not allocated in the non-server case so
+                 * they do not need to be freed. */
+                 jvmtiDeallocate(info);
+                 return serror;
+             }
+         } else {
+             info->address = address;
+             info->timeout = timeout;
          }
 
          /*
