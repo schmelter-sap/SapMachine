@@ -31,10 +31,12 @@ void onDemand_limitServer(jboolean isServer);
 void onDemand_limitAddress(char const* address);
 void onDemand_setTransport(char const* transport);
 void onDemand_init();
-void onDemand_notifyWaitingForCnnection();
+void onDemand_notifyWaitingForConnection();
 void onDemand_notifyDebuggingStarted();
 jboolean onDemand_waitForNewSession();
 jboolean onDemand_isEnabled();
+long onDemand_getTimeout();
+void onDemand_connectionFailed();
 
 /* Exteneral API */
 typedef enum {
@@ -49,19 +51,21 @@ typedef enum {
 
 typedef enum {
     STARTING_ERROR_OK,
+    STARTING_ERROR_DISABLED,
     STARTING_ERROR_WRONG_STATE,
     STARTING_ERROR_TIMED_OUT
 } onDemandStartingError;
 
 typedef enum {
     STOPPING_ERROR_OK,
+    STOPPING_ERROR_DISABLED,
     STOPPING_ERROR_WRONG_STATE,
     STOPPING_ERROR_TIMED_OUT
 } onDemandStoppingError;
 
-char* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server, jboolean* has_address_override, char* address, jint address_max_size);
-onDemandState onDemand_getState(jboolean* is_server, char* address, jint address_max_size, jlong* session_id);
-onDemandStartingError onDemand_startDebugging(jlong timeout, jboolean is_server, char const* address, jlong* session_id);
-onDemandStoppingError onDemand_stopDebugging(jlong timeout, jlong session_id);
+JNIEXPORT char const* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server, jboolean* has_address_override, char* address, jint address_max_size);
+JNIEXPORT onDemandState onDemand_getState(jboolean* is_server, char* address, jint address_max_size, jlong* session_id);
+JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thread, jint timeout, jboolean is_server, char const* address, jlong* session_id);
+JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jint timeout, jlong session_id);
 
 #endif

@@ -123,6 +123,10 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JMXStopRemoteDCmd>(jmx_agent_export_flags, true,false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JMXStatusDCmd>(jmx_agent_export_flags, true,false));
 
+  // Debug on demand
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandInfoDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStartDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStopDCmd>(full_export, true, false));
 }
 
 #ifndef HAVE_EXTRA_DCMD
@@ -1053,4 +1057,189 @@ void TouchedMethodsDCmd::execute(DCmdSource source, TRAPS) {
 
 int TouchedMethodsDCmd::num_arguments() {
   return 0;
+}
+
+
+
+static bool debug_on_demand_initialized = false;
+
+typedef enum {
+  ON_DEMAND_DISABLED,
+  ON_DEMAND_INITIAL,
+  ON_DEMAND_INACTIVE,
+  ON_DEMAND_STARTING,
+  ON_DEMAND_WAITING_FOR_CONNECTION,
+  ON_DEMAND_CONNECTED,
+  ON_DEMAND_STOPPING
+} onDemandState;
+
+typedef enum {
+  STARTING_ERROR_OK,
+  STARTING_ERROR_DISABLED,
+  STARTING_ERROR_WRONG_STATE,
+  STARTING_ERROR_TIMED_OUT
+} onDemandStartingError;
+
+typedef enum {
+  STOPPING_ERROR_OK,
+  STOPPING_ERROR_DISABLED,
+  STOPPING_ERROR_WRONG_STATE,
+  STOPPING_ERROR_TIMED_OUT
+} onDemandStoppingError;
+
+static char const* onDemand_symbols[] = { "onDemand_getConfig", "onDemand_getState", "onDemand_startDebugging", "onDemand_stopDebugging" };
+static void* onDemand_functions[sizeof(onDemand_symbols) / sizeof(char const*)] = { NULL, };
+
+extern "C" typedef JNIEXPORT char const* (*onDemand_getConfigPtr)(jboolean* has_is_server_override, jboolean* is_server,
+                                                        jboolean* has_address_override, char* address,
+                                                        jint address_max_size);
+extern "C" typedef JNIEXPORT onDemandState (*onDemand_getStatePtr)(jboolean* is_server, char* address,
+                                                        jint address_max_size, jlong* session_id);
+extern "C" typedef JNIEXPORT onDemandStartingError (*onDemand_startDebuggingPtr)(JNIEnv* env, jthread thread, jlong timeout, jboolean is_server,
+                                                                      char const* address, jlong* session_id);
+extern "C" typedef JNIEXPORT onDemandStoppingError (*onDemand_stopDebuggingPtr)(JNIEnv* env, jthread thread, jlong timeout, jlong session_id);
+
+static void ensure_debug_on_demand_initialized() {
+  if (debug_on_demand_initialized) {
+    return;
+  }
+
+  AgentLibrary* agent;
+
+  for (agent = Arguments::agents(); agent != NULL; agent = agent->next()) {
+    if (strcmp("jdwp", agent->name()) == 0) {
+      for (size_t i = 0; i < sizeof(onDemand_symbols) / sizeof(char const*); ++i) {
+        onDemand_functions[i] = os::find_agent_function(agent, false, &onDemand_symbols[i], 1);
+      }
+    }
+  }
+
+  debug_on_demand_initialized = true;
+}
+
+static char const* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server,
+                                      jboolean* has_address_override, char* address, jint address_max_size) {
+  ensure_debug_on_demand_initialized();
+
+  if (onDemand_functions[0] != NULL) {
+    return ((onDemand_getConfigPtr) onDemand_functions[0])(has_is_server_override, is_server, has_address_override, address, address_max_size);
+  }
+
+  return NULL;
+}
+
+static onDemandState onDemand_getState(jboolean* is_server, char* address, jint address_max_size, jlong* session_id) {
+  ensure_debug_on_demand_initialized();
+
+  if (onDemand_functions[1] != NULL) {
+    return ((onDemand_getStatePtr) onDemand_functions[1])(is_server, address, address_max_size, session_id);
+  }
+
+  return ON_DEMAND_DISABLED;
+}
+
+static onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thread, jlong timeout, jboolean is_server,
+                                                     char const* address, jlong* session_id) {
+  ensure_debug_on_demand_initialized();
+
+  if (onDemand_functions[2] != NULL) {
+    return ((onDemand_startDebuggingPtr) onDemand_functions[2])(env, thread, timeout, is_server, address, session_id);
+  }
+
+  return STARTING_ERROR_DISABLED;
+}
+
+static onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jlong timeout, jlong session_id) {
+  ensure_debug_on_demand_initialized();
+
+  if (onDemand_functions[3] != NULL) {
+    return ((onDemand_stopDebuggingPtr) onDemand_functions[3])(env, thread, timeout, session_id);
+  }
+
+  return STOPPING_ERROR_DISABLED;
+}
+
+DebugOnDemandInfoDCmd::DebugOnDemandInfoDCmd(outputStream* output, bool heap) : DCmd(output, heap) {
+}
+
+void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
+  ThreadToNativeFromVM ttn((JavaThread*) THREAD);
+  jboolean has_is_server_override;
+  jboolean is_server_override;
+  jboolean has_address_override;
+  char address_override[1024];
+  char address[1024]; 
+  char const* transport = onDemand_getConfig(&has_is_server_override, &is_server_override, &has_address_override, address_override, (jint) sizeof(address_override));
+
+  if (transport != NULL) {
+      jboolean is_server;
+      jlong session_id;
+      onDemandState state = onDemand_getState(&is_server, address, (jint) sizeof(address), &session_id);
+      
+      if (state == ON_DEMAND_DISABLED) {
+        output()->print_cr("Debugging on demand is not enabled.");
+      } else {
+        output()->print_cr("Debugging on demand is currently enabled.");
+        
+        if (has_is_server_override) {
+          output()->print_cr("It only supports %s mode", is_server_override ? "server" : "client");
+        }
+
+        if (has_address_override) {
+          output()->print_cr("It only supports connecting to %s", address_override);
+        }
+
+        if (state == ON_DEMAND_INITIAL) {
+          output()->print_cr("It is currently in the initial state and was not used yet.");
+        } else if (state == ON_DEMAND_INACTIVE) {
+          output()->print_cr("It is currently inactive, but was used before. The last session id was %lld", session_id);
+        } else {
+          if (state == ON_DEMAND_STARTING) {
+            output()->print_cr("The debugging system is currently starting up is is expected to be (waiting for) connecting shortly.");
+          } else if (state == ON_DEMAND_WAITING_FOR_CONNECTION) {
+            if (is_server) {
+              output()->print_cr("The debugging system is currently waiting for the debugger to connect.");
+            } else {
+              output()->print_cr("The debugging system is currently waiting for the debugger to be connected.");
+            }
+          } else if (state == ON_DEMAND_CONNECTED) {
+            output()->print_cr("The debugger is currently attached and debugging.");
+          } else if (state == ON_DEMAND_STOPPING) {
+            output()->print_cr("The debugging sysgtem is currently stopping.");
+          }
+          output()->print_cr("The mode is %s.", is_server ? "server" : "client");
+          output()->print_cr("The address is %s", address);
+          output()->print_cr("The session id is %lld", session_id);
+        }
+      }
+  } else {
+    output()->print_cr("Debugging on demand is not enabled.");
+  }
+}
+
+DebugOnDemandStartDCmd::DebugOnDemandStartDCmd(outputStream* output, bool heap) : DCmd(output, heap) {
+}
+
+void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
+  JavaThread* thread = (JavaThread*) THREAD;
+  jthread jt = JNIHandles::make_local(thread->threadObj());
+
+  ThreadToNativeFromVM ttn(thread);
+
+  jlong session_id;
+  onDemandStartingError error = onDemand_startDebugging(thread->jni_environment(), jt, 10000000, JNI_FALSE, "localhost:8080", &session_id);
+  output()->print_cr("Got %d for session %lld", error, session_id);
+}
+
+DebugOnDemandStopDCmd::DebugOnDemandStopDCmd(outputStream* output, bool heap) : DCmd(output, heap) {
+}
+
+void DebugOnDemandStopDCmd::execute(DCmdSource source, TRAPS) {
+  JavaThread* thread = (JavaThread*) THREAD;
+  jthread jt = JNIHandles::make_local(thread->threadObj());
+
+  ThreadToNativeFromVM ttn(thread);
+
+  onDemandStoppingError error = onDemand_stopDebugging(thread->jni_environment(), jt, 10000, 1L);
+  output()->print_cr("Got %d", error);
 }
