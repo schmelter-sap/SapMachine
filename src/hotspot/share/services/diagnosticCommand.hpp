@@ -888,7 +888,10 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
-class DebugOnDemandStartDCmd : public DCmd {
+class DebugOnDemandStartDCmd : public DCmdWithParser {
+  DCmdArgument<char*> _address;
+  DCmdArgument<bool> _is_server;
+  DCmdArgument<jlong> _timeout;
 public:
   DebugOnDemandStartDCmd(outputStream* output, bool heap);
   static const char* name() {
@@ -926,7 +929,7 @@ public:
       "monitor", NULL };
     return p;
   }
-  static int num_arguments() { return 0; }
+  static int num_arguments();
   virtual void execute(DCmdSource source, TRAPS);
 };
 
