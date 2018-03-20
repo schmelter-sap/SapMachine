@@ -356,7 +356,7 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
         (*t)->StopListening(t);
         if (!onDemand_isEnabled()) {
             EXIT_ERROR(JVMTI_ERROR_NONE, "could not connect, timeout or fatal error");
-        } else {
+        } else if(!gdata->vmDead) {
             debugInit_reset(getEnv());
         }
     } else {
@@ -377,13 +377,11 @@ attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
         jint err = (*trans)->Attach(trans, info->address, info->timeout, 0);
         if (err != JDWPTRANSPORT_ERROR_NONE) {
             printLastError(trans, err);
-            /* The name, address and allowed_peers fields in 'info'
-            * are not allocated in the non-server case so
-            * they do not need to be freed. */
-            // TODO: check this.
             jvmtiDeallocate(info);
             (*trans)->StopListening(trans);
-            debugInit_reset(getEnv());
+            if (!gdata->vmDead) {
+                debugInit_reset(getEnv());
+            }
             return;
         }
     }
