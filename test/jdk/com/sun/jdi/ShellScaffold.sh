@@ -895,15 +895,17 @@ startDebuggee()
     fi
 
     debuggeepid=
-    waitForJdbMsg Listening 4
+    if [ -z "$debuggeeJdwpOpts"]; then
+        waitForJdbMsg Listening 4
 
-    beOption="-agentlib:jdwp=transport=$transport,address=$address,server=n,suspend=y" 
-#   beOption="-Xdebug -Xrunjdwp:transport=$transport,address=$address,server=n,suspend=y"
+        debuggeeJdwpOpts="-agentlib:jdwp=transport=$transport,address=$address,server=n,suspend=y" 
+    #   debuggeeJdwpOpts="-Xdebug -Xrunjdwp:transport=$transport,address=$address,server=n,suspend=y"
+    fi
 
     thecmd="$jdk/bin/$java $mode -classpath $tmpFileDir $baseArgs $args \
             -Djtreg.classDir=$TESTCLASSES \
             -showversion \
-             $beOption \
+             $debuggeeJdwpOpts \
              $pkgDot$classname"
     echo "Cmd: $thecmd"
 
