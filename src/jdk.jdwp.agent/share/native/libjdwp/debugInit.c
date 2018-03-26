@@ -268,6 +268,8 @@ DEF_Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
         forceExit(1); /* Kill entire process, no core dump wanted */
     }
 
+    onDemand_init();
+
     /* Parse input options */
     if (!parseOptions(options)) {
         /* No message necessary, should have been printed out already */
@@ -1259,7 +1261,7 @@ parseOptions(char *options)
 
             if (onDemand) {
                 initOnStartup = JNI_FALSE;
-                onDemand_init();
+                onDemand_enable();
             }
         } else {
             goto syntax_error;
