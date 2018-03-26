@@ -79,12 +79,19 @@ void onDemand_init() {
         return;
     }
 
-    enabled = JNI_TRUE;
     onDemandMonitor = debugMonitorCreate("JDWP Initialization Monitor");
     onDemandCurrentState = ON_DEMAND_INITIAL;
-    LOG_MISC(("Debugging on demand enabled"));
+    LOG_MISC(("Debugging on demand initialized"));
 
     initCalled = JNI_TRUE;
+}
+
+void onDemand_enable() {
+  debugMonitorEnter(onDemandMonitor);
+  enabled = JNI_TRUE;
+  debugMonitorExit(onDemandMonitor);
+
+  LOG_MISC(("Debugging on demand enabled"));
 }
 
 void onDemand_notifyWaitingForConnection() {
