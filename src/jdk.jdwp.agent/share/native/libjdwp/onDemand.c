@@ -65,6 +65,19 @@ void onDemand_limitAddress(char const* address) {
     onDemandAddress[sizeof(onDemandAddress) - 1] = '\0';
 }
 
+void onDemand_setCurrentAddress(char const* address) {
+  debugMonitorEnter(onDemandMonitor);
+  if (strcmp(onDemandTransportName, "dt_socket") == 0) {
+    char* port = strchr(onDemandAddress, ':');
+    port = port ? port + 1 : onDemandAddress;
+    snprintf(port, sizeof(onDemandAddress) - (port - onDemandAddress), "%s", address);
+  } else {
+    snprintf(onDemandAddress, sizeof(onDemandAddress), "%s", address);
+  }
+  onDemandAddress[sizeof(onDemandAddress) - 1] = '\0';
+  debugMonitorExit(onDemandMonitor);
+}
+
 long onDemand_getTimeout() {
   return onDemandTimeout;
 }
