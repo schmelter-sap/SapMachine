@@ -564,6 +564,10 @@ transport_startTransport(jboolean isServer, char *name, char *address,
             goto handleError;
         }
 
+        if (onDemand_isEnabled()) {
+          onDemand_setCurrentAddress(retAddress);
+        }
+
         /*
          * Record listener address in a system property
          */
