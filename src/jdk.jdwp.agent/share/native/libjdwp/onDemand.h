@@ -31,6 +31,7 @@ void onDemand_limitServer(jboolean isServer);
 void onDemand_limitAddress(char const* address);
 void onDemand_setTransport(char const* transport);
 void onDemand_init();
+void onDemand_enable();
 void onDemand_notifyWaitingForConnection();
 void onDemand_notifyDebuggingStarted();
 jboolean onDemand_waitForNewSession();
