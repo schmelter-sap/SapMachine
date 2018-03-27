@@ -154,8 +154,9 @@ cleanup()
 
     # Kill all processes that have our special
     # keyword in their cmd line.
-    killOrphans cleanup $jdbKeyword
-    killOrphans cleanup $debuggeeKeyword
+    for keyword in ${allKeywords} ; do
+         killOrphans cleanup $keyword
+    done
 }
 
 # Kill all processes with $2 in their cmd lines
@@ -235,6 +236,7 @@ setup()
     orphanKeyword=HANGINGJAVA-$$
     debuggeeKeyword=${orphanKeyword}_DEB
     jdbKeyword=${orphanKeyword}_JDB
+    allKeywords=${debuggeeKeyword} ${jdbKeyword}
     baseArgs=-D${debuggeeKeyword}
     if [ -z "$TESTCLASSES" ] ; then
         echo "--Warning:  TESTCLASSES is not defined; using TESTCLASSES=."
