@@ -236,7 +236,7 @@ setup()
     orphanKeyword=HANGINGJAVA-$$
     debuggeeKeyword=${orphanKeyword}_DEB
     jdbKeyword=${orphanKeyword}_JDB
-    allKeywords=${debuggeeKeyword} ${jdbKeyword}
+    allKeywords="${debuggeeKeyword} ${jdbKeyword}"
     baseArgs=-D${debuggeeKeyword}
     if [ -z "$TESTCLASSES" ] ; then
         echo "--Warning:  TESTCLASSES is not defined; using TESTCLASSES=."
@@ -861,8 +861,12 @@ startJdb()
     echo "--Starting jdb, address=$address"
     if [ -z "$address" ] ; then
        # Let jdb choose the port and write it to stdout
-       mydojdbCmds | $jdb $jdbOptions -listenany | tee $jdbOutFile &
-
+       if [ -z "$jdbConnectionOptions" ] ; then
+           mydojdbCmds | $jdb $jdbOptions -listenany 2>&1 | tee $jdbOutFile &
+       else
+           mydojdbCmds | $jdb $jdbOptions $jdbConnectionOptions 2>&1 | tee $jdbOutFile &
+       fi
+       
        while [ 1 ] ; do
            lastLine=`$grep 'Listening at address' $jdbOutFile`
            if [ ! -z "$lastLine" ] ; then
@@ -871,9 +875,11 @@ startJdb()
            sleep 1
        done
        # jjh: we got the address ok, and seemed to start the debuggee
-       address=`echo $lastLine | sed -e 's@.*: *@@'`
+       address=`echo $lastLine | sed -e 's@.*: *@@' | tr -d '\r' `
+    elif [ -z "$jdbConnectionOptions" ] ; then
+       mydojdbCmds | $jdb $jdbOptions -listen $address 2>&1 | tee $jdbOutFile &
     else
-       mydojdbCmds | $jdb $jdbOptions -listen $address | tee $jdbOutFile &
+       mydojdbCmds | $jdb $jdbOptions $jdbConnectionOptions 2>&1 | tee $jdbOutFile &
     fi
     #echo address = $address
 
@@ -897,7 +903,7 @@ startDebuggee()
     fi
 
     debuggeepid=
-    if [ -z "$debuggeeJdwpOpts"]; then
+    if [ -z "$debuggeeJdwpOpts" ]; then
         waitForJdbMsg Listening 4
 
         debuggeeJdwpOpts="-agentlib:jdwp=transport=$transport,address=$address,server=n,suspend=y" 
@@ -911,7 +917,7 @@ startDebuggee()
              $pkgDot$classname"
     echo "Cmd: $thecmd"
 
-    sh -c "$thecmd | tee $debuggeeOutFile" &
+    sh -c "$thecmd 2>&1 | tee $debuggeeOutFile" &
 
     # Note that the java cmd and the tee cmd will be children of
     # the sh process.  We can use that to find them to kill them.
