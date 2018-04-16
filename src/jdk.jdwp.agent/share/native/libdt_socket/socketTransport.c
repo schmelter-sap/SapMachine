@@ -261,14 +261,14 @@ getPortNumber(const char *s_port) {
     n = strtoul(s_port, &eptr, 10);
     if (eptr != s_port + strlen(s_port)) {
         // incomplete conversion - port number contains non-digit
-        return -1;
+      return -1;
     }
 
     if (n > (u_short) -1) {
         // check that value supplied by user is less than
         // maximum possible u_short value (65535) and
         // will not be truncated later.
-        return -1;
+      return -1;
     }
 
     return n;
