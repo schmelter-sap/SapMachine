@@ -8,7 +8,10 @@ mydojdbCmds()
    if [ $(echo $debuggeeJdwpOpts | grep -c suspend=y) = 1 ]; then 
        waitForJdbMsg ']' 1
    else
+#       waitForJdbMsg '>' 1
+       waitForJdbMsg 'VM Started: ' 1
    fi
+
    # Send commands from the test
    dojdbCmds
    # Finish jdb with quit command
