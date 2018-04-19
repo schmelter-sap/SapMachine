@@ -33,7 +33,7 @@ dojdbCmds()
 {
    setBkpts @1
    runToBkpt @1
-   cmd set w = true
+   cmd set w = false
    cmd allowExit cont
 }
 
