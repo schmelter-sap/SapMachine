@@ -8,8 +8,7 @@ mydojdbCmds()
    if [ $(echo $debuggeeJdwpOpts | grep -c suspend=y) = 1 ]; then 
        waitForJdbMsg ']' 1
    else
-#       waitForJdbMsg '>' 1
-       waitForJdbMsg 'VM Started: ' 1
+       waitForJdbMsg '(> )|(VM Started: )' 1
    fi
 
    # Send commands from the test
@@ -26,8 +25,26 @@ dod_setup() {
 }
 
 dod_runjcmd() {
-    echo "running jcmd: jcmd $*"
+    echo "running jcmd: jcmd $realDebuggeePid $*"
 
-    echo "running $jdk/bin/jcmd $*" >> "jcmdOutputFile"
-    sh -c "$jdk/bin/jcmd $* | tee $jcmdOutputFile"
+    echo "running $jdk/bin/jcmd $realDebuggeePid $*" >> "$jcmdOutputFile"
+    sh -c "$jdk/bin/jcmd $realDebuggeePid $* 2>&1 | tee -a $jcmdOutputFile"
+}
+
+dod_startJdb() {
+    startJdb
+}
+
+dod_startDebuggee() {
+    startDebuggee
+	sleep 2
+}
+
+dod_startJcmd() {
+    debuggeeCmd=`$jdk/bin/jps -v | $grep $debuggeeKeyword`
+    realDebuggeePid=`echo "$debuggeeCmd" | sed -e 's@ .*@@'`
+
+    if [ ! -z "$realDebuggeePid" ] ; then
+        dojcmdCmds
+	fi
 }
