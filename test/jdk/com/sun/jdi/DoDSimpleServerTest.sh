@@ -13,8 +13,7 @@ source "$(dirname $0)"/DoDScaffolding.sh
 
 classname=DoDSimpleServerTest
 
-createJavaFile()
-{
+createJavaFile() {
     cat <<EOF > $classname.java.1
 class $classname {
     public static void main(String[] args) throws Exception {
@@ -29,12 +28,15 @@ class $classname {
 EOF
 }
 
-dojdbCmds()
-{
-   setBkpts @1
-   runToBkpt @1
-   cmd set w = false
-   cmd allowExit cont
+dojdbCmds() {
+    setBkpts @1
+    runToBkpt @1
+    cmd set w = false
+    cmd allowExit cont
+}
+
+dojcmdCmds() {
+    dod_runjcmd DoD.start address=localhost:$address is_server=false timeout=10000
 }
 
 compileOptions=-g
@@ -42,10 +44,11 @@ dod_setup
 docompile
 
 jdbConnectionOptions="-connect com.sun.jdi.SocketListen:port=0,timeout=100000"
-startJdb
+debuggeeJdwpOpts=-agentlib:jdwp=ondemand=y,transport=dt_socket,suspend=n
 
-debuggeeJdwpOpts=-agentlib:jdwp=ondemand=n,transport=dt_socket,address=localhost:$address,server=n,suspend=n
-startDebuggee
+dod_startJdb
+dod_startDebuggee
+dod_startJcmd
 
 wait $debuggeepid
 
