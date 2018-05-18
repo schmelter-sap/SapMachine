@@ -908,7 +908,7 @@ public:
       "monitor", NULL };
     return p;
   }
-  static int num_arguments() { return 0; }
+  static int num_arguments();
   virtual void execute(DCmdSource source, TRAPS);
 };
 
@@ -929,7 +929,7 @@ public:
       "monitor", NULL };
     return p;
   }
-  static int num_arguments();
+  static int num_arguments() { return 0; }
   virtual void execute(DCmdSource source, TRAPS);
 };
 
