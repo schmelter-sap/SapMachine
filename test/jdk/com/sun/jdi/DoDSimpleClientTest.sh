@@ -2,16 +2,16 @@
 
 #  @test
 #  @bug 4422141 4695338
-#  @summary Simple Test
+#  @summary Simple Client Test
 #  @author Ralf Schmelter
 #
 #  @key intermittent
-#  @run shell DoDSimpleServerTest.sh
+#  @run shell DoDSimpleClientTest.sh
 
 #set -x
 source "$(dirname $0)"/DoDScaffolding.sh
 
-classname=DoDSimpleServerTest
+classname=DoDSimpleClientTest
 
 createJavaFile() {
     cat <<EOF > $classname.java.1
@@ -36,8 +36,7 @@ dojdbCmds() {
 }
 
 dojcmdCmds() {
-    dod_runjcmd DoD.start address=localhost:0 is_server=true timeout=100000
-	dod_runjcmd DoD.info
+    dod_runjcmd DoD.start address=localhost:$address is_server=false timeout=10000
 }
 
 compileOptions=-g
@@ -47,10 +46,10 @@ docompile
 jdbConnectionOptions="-connect com.sun.jdi.SocketListen:port=0,timeout=100000"
 debuggeeJdwpOpts=-agentlib:jdwp=ondemand=y,transport=dt_socket,suspend=n
 
+dod_startJdb
 dod_startDebuggee
 sleep 2
 dod_startJcmd
-dod_startJdb
 
 wait $debuggeepid
 

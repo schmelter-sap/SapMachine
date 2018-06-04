@@ -37,7 +37,6 @@ dod_startJdb() {
 
 dod_startDebuggee() {
     startDebuggee
-	sleep 2
 }
 
 dod_startJcmd() {
