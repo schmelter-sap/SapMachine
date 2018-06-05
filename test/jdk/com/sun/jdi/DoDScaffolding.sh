@@ -32,10 +32,12 @@ dod_runjcmd() {
 }
 
 dod_startJdb() {
+    jdbConnectionOptions="$1"
     startJdb
 }
 
 dod_startDebuggee() {
+    debuggeeJdwpOpts="$1"
     startDebuggee
 }
 
@@ -46,4 +48,11 @@ dod_startJcmd() {
     if [ ! -z "$realDebuggeePid" ] ; then
         dojcmdCmds
 	fi
+}
+
+dod_getOnDemandPort() {
+    cat "$jcmdOutputFile"
+    cat "$jcmdOutputFile"
+	cat "$jcmdOutputFile" | grep "The address is" | tail -n 1 | cut -d ':' -f 2 | tr -d '\r\n'
+	address=$(cat "$jcmdOutputFile" | grep 'The address is' | tail -n 1 | cut -d ':' -f 2 | tr -d '\r\n' )
 }
