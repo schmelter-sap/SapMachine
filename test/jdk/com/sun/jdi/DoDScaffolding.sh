@@ -51,8 +51,5 @@ dod_startJcmd() {
 }
 
 dod_getOnDemandPort() {
-    cat "$jcmdOutputFile"
-    cat "$jcmdOutputFile"
-	cat "$jcmdOutputFile" | grep "The address is" | tail -n 1 | cut -d ':' -f 2 | tr -d '\r\n'
 	address=$(cat "$jcmdOutputFile" | grep 'The address is' | tail -n 1 | cut -d ':' -f 2 | tr -d '\r\n' )
 }
