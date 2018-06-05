@@ -37,17 +37,15 @@ dojdbCmds() {
 
 dojcmdCmds() {
     dod_runjcmd DoD.start address=localhost:$address is_server=false timeout=10000
+    dod_runjcmd DoD.info
 }
 
 compileOptions=-g
 dod_setup
 docompile
 
-jdbConnectionOptions="-connect com.sun.jdi.SocketListen:port=0,timeout=100000"
-debuggeeJdwpOpts=-agentlib:jdwp=ondemand=y,transport=dt_socket,suspend=n
-
-dod_startJdb
-dod_startDebuggee
+dod_startJdb "-connect com.sun.jdi.SocketListen:port=0,timeout=100000"
+dod_startDebuggee "-agentlib:jdwp=ondemand=y,transport=dt_socket,suspend=n"
 sleep 2
 dod_startJcmd
 
