@@ -233,6 +233,10 @@ static void JNICALL call_initialize(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* 
 JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thread, jint timeout, jboolean is_server, char const* address, jlong* session_id) {
     onDemandStartingError result;
 
+    if (!enabled) {
+      return STARTING_ERROR_DISABLED;
+    }
+
     debugMonitorEnter(onDemandMonitor);
 
     if ((onDemandCurrentState == ON_DEMAND_INITIAL) || (onDemandCurrentState == ON_DEMAND_INACTIVE)) {
@@ -246,6 +250,7 @@ JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thr
 
         if (onDemandCurrentState == ON_DEMAND_INITIAL) {
             debugInit_initForOnDemand(env, thread);
+            result = STARTING_ERROR_OK;
         } else {
             debugMonitorNotifyAll(onDemandMonitor);
 
