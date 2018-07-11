@@ -1218,23 +1218,24 @@ void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
 }
 
 DebugOnDemandStartDCmd::DebugOnDemandStartDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap),
-  _address("address", "The address to connect to (in client mode) or the address to listen on (in server mode)", "STRING",  false),
-  _is_server("is_server", "If true we use server mode and client mode otherwise", "BOOLEAN", false, "true"),
-  _timeout("timeout", "The timeout in milliseconds are which the connect is treated as failed", "INT", false, "1000000") {
+  _address("address", "The address to connect to (in client mode) or the address to listen on (in server mode)", "STRING",  true),
+  _is_server("is_server", "If true we use server mode and client mode otherwise", "BOOLEAN", true, "true"),
+  _timeout("timeout", "The timeout in milliseconds are which the connect is treated as failed", "INT", true, "1000000") {
   _dcmdparser.add_dcmd_option(&_address);
   _dcmdparser.add_dcmd_option(&_is_server);
   _dcmdparser.add_dcmd_option(&_timeout);
 }
 
 int DebugOnDemandStartDCmd::num_arguments() {
-    ResourceMark rm;
-    DebugOnDemandStartDCmd* dcmd = new DebugOnDemandStartDCmd(NULL, false);
-    if (dcmd != NULL) {
-        DCmdMark mark(dcmd);
-        return dcmd->_dcmdparser.num_arguments();
-    } else {
-        return 0;
-    }
+  ResourceMark rm;
+  DebugOnDemandStartDCmd* dcmd = new DebugOnDemandStartDCmd(NULL, false);
+
+  if (dcmd != NULL) {
+    DCmdMark mark(dcmd);
+    return dcmd->_dcmdparser.num_arguments();
+  } else {
+    return 0;
+  }
 }
 
 void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
