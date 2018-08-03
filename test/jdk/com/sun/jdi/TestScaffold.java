@@ -488,6 +488,12 @@ abstract public class TestScaffold extends TargetAdapter {
     }
 
     /**
+     * Called when the VMConnection is created.
+     */
+    protected void vmConnectionCreated(VMConnection connection) {
+    }
+
+    /**
      * This is called to connect to a debuggee VM.  It starts the VM and
      * installs a listener to catch VMStartEvent, our default events, and
      * VMDisconnectedEvent.  When these events appear, that is remembered
@@ -511,11 +517,14 @@ abstract public class TestScaffold extends TargetAdapter {
      * etc.
      */
     public void connect(String args[]) {
+        System.out.println("Raw Args: " + Arrays.toString(args));
         ArgInfo argInfo = parseArgs(args);
 
         argInfo.targetVMArgs += VMConnection.getDebuggeeVMOptions();
+        System.out.println("Rar VM Args: " + argInfo.targetVMArgs);
         connection = new VMConnection(argInfo.connectorSpec,
                                       argInfo.traceFlags);
+        vmConnectionCreated(connection);
 
         addListener(new TargetAdapter() {
                 public void eventSetComplete(EventSet set) {
