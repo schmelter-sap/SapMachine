@@ -371,7 +371,7 @@ class VMConnection {
         try {
             String retAddress = listener.startListening(connectorArgs);
             process = listeningStarted(retAddress);
-            
+
             if (process != null) {
                 displayRemoteOutput(process.getErrorStream());
                 displayRemoteOutput(process.getInputStream());
