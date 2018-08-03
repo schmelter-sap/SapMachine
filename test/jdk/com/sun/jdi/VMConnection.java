@@ -30,11 +30,21 @@ import java.io.*;
 
 
 /**
+ * Called by the listening connector when listening was started. The address
+ * is the actual address on which is listened. Should return the process
+ * object of the debuggee which is connecting.
+ */
+interface ListenerCallback {
+    public Process startedListening(String address) throws IOException;
+}
+
+/**
  * Manages a VM conection for the JDI test framework.
  */
 class VMConnection {
     private VirtualMachine vm;
     private Process process = null;
+    private ListenerCallback listenerCallback = null;
     private int outputCompleteCount = 0;
 
     private final Connector connector;
@@ -163,6 +173,11 @@ class VMConnection {
         return vm;
     }
 
+    void setListenerCallback(ListenerCallback callback) {
+        assert vm == null; // Register before open was called.
+        this.listenerCallback = callback;
+    }
+ 
     boolean setConnectorArg(String name, String value) {
         /*
          * Too late if the connection already made
@@ -345,12 +360,26 @@ class VMConnection {
         return null; // Shuts up the compiler
     }
 
+    /* called when the listing has started at the specific address. */
+    protected Process listeningStarted(String addr) {
+        return null;
+    }
+
     /* listen for connection from target vm */
     private VirtualMachine listenTarget() {
         ListeningConnector listener = (ListeningConnector)connector;
         try {
             String retAddress = listener.startListening(connectorArgs);
+            process = listeningStarted(retAddress);
+            
+            if (process != null) {
+                displayRemoteOutput(process.getErrorStream());
+                displayRemoteOutput(process.getInputStream());
+            }
             System.out.println("Listening at address: " + retAddress);
+            if (listenerCallback != null) {
+                listenerCallback.startedListening(retAddress);
+            }
             vm = listener.accept(connectorArgs);
             listener.stopListening(connectorArgs);
             return vm;
