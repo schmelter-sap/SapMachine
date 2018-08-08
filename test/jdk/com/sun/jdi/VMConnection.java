@@ -360,26 +360,21 @@ class VMConnection {
         return null; // Shuts up the compiler
     }
 
-    /* called when the listing has started at the specific address. */
-    protected Process listeningStarted(String addr) {
-        return null;
-    }
-
     /* listen for connection from target vm */
     private VirtualMachine listenTarget() {
         ListeningConnector listener = (ListeningConnector)connector;
         try {
             String retAddress = listener.startListening(connectorArgs);
-            process = listeningStarted(retAddress);
-
-            if (process != null) {
-                displayRemoteOutput(process.getErrorStream());
-                displayRemoteOutput(process.getInputStream());
-            }
-            System.out.println("Listening at address: " + retAddress);
             if (listenerCallback != null) {
-                listenerCallback.startedListening(retAddress);
+                process = listenerCallback.startedListening(retAddress);
+
+                if (process != null) {
+                    displayRemoteOutput(process.getErrorStream());
+                    displayRemoteOutput(process.getInputStream());
+                }
             }
+
+            System.out.println("Listening at address: " + retAddress);
             vm = listener.accept(connectorArgs);
             listener.stopListening(connectorArgs);
             return vm;
@@ -391,5 +386,12 @@ class VMConnection {
             System.err.println("\n Internal debugger error.");
         }
         return null; // Shuts up the compiler
+    }
+
+    public Process clearProcess() {
+        Process result = process;
+        process = null;
+
+        return result;
     }
 }

@@ -50,13 +50,22 @@ import java.util.stream.*;
 class ListenerTestTArg {
 
     public static void main(String[] args) throws InterruptedException {
-        System.out.println("Started ....");
+        for (int i = 0; i < 1000; ++i) {
+            System.out.println("Step nr. " + i);
+            sleepSome();
+        }
+    }
+
+    public static void sleepSome() throws InterruptedException {
+        Thread.sleep(100);
     }
 }
 
     /********** test program **********/
 
 public class ListenerTest extends TestScaffold implements ListenerCallback {
+
+    private VMConnection connection;
 
     public ListenerTest(String args[]) {
         super(args);
@@ -70,12 +79,13 @@ public class ListenerTest extends TestScaffold implements ListenerCallback {
     public Process startedListening(String address) throws IOException {
         ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
                 "-agentlib:jdwp=transport=dt_socket,address=" + address +
-                ",server=n,suspend=y", ListenerTestTArg.class.getName());
+                ",server=n,suspend=n", ListenerTestTArg.class.getName());
         return pb.start();
     }
 
     @Override
     protected void vmConnectionCreated(VMConnection connection) {
+        this.connection = connection;
         System.out.println("Setting callback for listener ...");
         connection.setListenerCallback(this);
     }
@@ -83,7 +93,12 @@ public class ListenerTest extends TestScaffold implements ListenerCallback {
     /********** test core **********/
 
     protected void runTests() throws Exception {
-        BreakpointEvent bpe = startToMain("ListenerTestTArg");
+        BreakpointEvent bpe = startTo(ListenerTestTArg.class.getName(), 
+                                      "sleepSome", "()V");
+        System.out.println("Current stack: ");
+        System.out.println(bpe.thread().frames());
+        System.out.println("Ending process ...");
+        connection.clearProcess().destroy();
 
         listenUntilVMDisconnect();
 
