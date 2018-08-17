@@ -33,7 +33,7 @@
 static jboolean enabled = JNI_FALSE;
 static jboolean initCalled = JNI_FALSE;
 static jrawMonitorID onDemandMonitor;
-static onDemandCurrentState = ON_DEMAND_DISABLED;
+static onDemandState onDemandCurrentState = ON_DEMAND_DISABLED;
 static char onDemandTransportName[128];
 static jboolean onDemandIsServer = JNI_FALSE;
 static char onDemandAddress[1024];

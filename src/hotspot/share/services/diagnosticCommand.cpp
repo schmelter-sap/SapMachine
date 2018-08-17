@@ -37,6 +37,7 @@
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/flags/jvmFlag.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/os.hpp"
 #include "services/diagnosticArgument.hpp"
@@ -1090,14 +1091,14 @@ typedef enum {
 static char const* onDemand_symbols[] = { "onDemand_getConfig", "onDemand_getState", "onDemand_startDebugging", "onDemand_stopDebugging" };
 static void* onDemand_functions[sizeof(onDemand_symbols) / sizeof(char const*)] = { NULL, };
 
-extern "C" typedef JNIEXPORT char const* (*onDemand_getConfigPtr)(jboolean* has_is_server_override, jboolean* is_server,
+extern "C" typedef char const* (JNICALL *onDemand_getConfigPtr)(jboolean* has_is_server_override, jboolean* is_server,
                                                         jboolean* has_address_override, char* address,
                                                         jint address_max_size);
-extern "C" typedef JNIEXPORT onDemandState (*onDemand_getStatePtr)(jboolean* is_server, char* address,
+extern "C" typedef onDemandState (JNICALL *onDemand_getStatePtr)(jboolean* is_server, char* address,
                                                         jint address_max_size, jlong* session_id);
-extern "C" typedef JNIEXPORT onDemandStartingError (*onDemand_startDebuggingPtr)(JNIEnv* env, jthread thread, jlong timeout, jboolean is_server,
+extern "C" typedef onDemandStartingError (JNICALL *onDemand_startDebuggingPtr)(JNIEnv* env, jthread thread, jlong timeout, jboolean is_server,
                                                                       char const* address, jlong* session_id);
-extern "C" typedef JNIEXPORT onDemandStoppingError (*onDemand_stopDebuggingPtr)(JNIEnv* env, jthread thread, jlong timeout, jlong session_id);
+extern "C" typedef onDemandStoppingError (JNICALL *onDemand_stopDebuggingPtr)(JNIEnv* env, jthread thread, jlong timeout, jlong session_id);
 
 static void ensure_debug_on_demand_initialized() {
   if (debug_on_demand_initialized) {
@@ -1192,7 +1193,7 @@ void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
         if (state == ON_DEMAND_INITIAL) {
           output()->print_cr("It is currently in the initial state and was not used yet.");
         } else if (state == ON_DEMAND_INACTIVE) {
-          output()->print_cr("It is currently inactive, but was used before. The last session id was %lld", session_id);
+          output()->print_cr("It is currently inactive, but was used before. The last session id was " JLONG_FORMAT, session_id);
         } else {
           if (state == ON_DEMAND_STARTING) {
             output()->print_cr("The debugging system is currently starting up is is expected to be (waiting for) connecting shortly.");
@@ -1209,7 +1210,7 @@ void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
           }
           output()->print_cr("The mode is %s.", is_server ? "server" : "client");
           output()->print_cr("The address is %s", address);
-          output()->print_cr("The session id is %lld", session_id);
+          output()->print_cr("The session id is " JLONG_FORMAT, session_id);
         }
       }
   } else {
@@ -1246,7 +1247,7 @@ void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
 
   jlong session_id;
   onDemandStartingError error = onDemand_startDebugging(thread->jni_environment(), jt, _timeout.value(), _is_server.value() ? JNI_TRUE : JNI_FALSE, _address.value(), &session_id);
-  output()->print_cr("Got %d for session %lld", error, session_id);
+  output()->print_cr("Got %d for session " JLONG_FORMAT, error, session_id);
 }
 
 DebugOnDemandStopDCmd::DebugOnDemandStopDCmd(outputStream* output, bool heap) : DCmd(output, heap) {
