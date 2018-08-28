@@ -63,12 +63,12 @@ class ListenerTestTArg {
 
     /********** test program **********/
 
-public class ListenerTest extends TestScaffold implements ListenerCallback {
+public class ListenerTest extends DoDScaffold implements ListenerCallback {
 
     private VMConnection connection;
 
     public ListenerTest(String args[]) {
-        super(args);
+        super(DebuggerConf.createSocketListener("localhost", 0));
     }
 
     public static void main(String[] args) throws Exception {
