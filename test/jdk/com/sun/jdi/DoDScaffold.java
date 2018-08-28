@@ -9,25 +9,31 @@ class DebuggerConf {
         this.isListener = isListener;
     }
 
-    public static DebuggerConf createSocketListener(String address) {
-        return new DebuggerConf("com.sun.jdi.SocketListen", address, true);
+    public static DebuggerConf createSocketListener(int port) {
+        String con = "com.sun.jdi.SocketListen:port=" + port;
+        return new DebuggerConf(con, "localhost:" + port, true);
+    }
+
+    public static DebuggerConf createSocketListener(String host) {
+        String con = "com.sun.jdi.SocketListen:localAddress=" + host;
+        return new DebuggerConf(con, "localhost", true);
+    }
+
+    public static DebuggerConf createSocketListener(String host, int port) {
+        String con = "com.sun.jdi.SocketListen:localAddress=" + host + 
+                     ",port=" + port;
+        return new DebuggerConf(con, host + ":" + port, true);
     }
 }
 
-public class DoDScaffold extends TestScaffold {
+public abstract class DoDScaffold extends TestScaffold {
 
-    public DoDScaffold(String[] args) {
-        super(args);
+    public DoDScaffold(DebuggerConf conf) {
+        super(new String[] {"-connect", conf.connector});
     }
 
     @Override
-    protected void runTests() throws Exception {
-        // TODO Auto-generated method stub
-    }
-
-    public void setDebuggerConf(DebuggerConf conf) {
-        // TODO: Sets system props accodring to spec.
-    }
+    protected abstract void runTests() throws Exception;
  
     protected VMConnection getCurrentConnection() {
         return null;
