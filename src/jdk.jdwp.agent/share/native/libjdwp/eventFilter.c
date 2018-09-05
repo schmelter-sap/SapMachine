@@ -1034,6 +1034,7 @@ setBreakpoint(HandlerNode *node)
          */
         if (!eventHandlerRestricted_iterator(
                 EI_BREAKPOINT, matchBreakpoint, lf)) {
+            log_debugee_location("setBreakpoint", NULL, lf->method, (int)lf->location);
             LOG_LOC(("SetBreakpoint at location: method=%p,location=%d",
                         lf->method, (int)lf->location));
             error = JVMTI_FUNC_PTR(gdata->jvmti,SetBreakpoint)

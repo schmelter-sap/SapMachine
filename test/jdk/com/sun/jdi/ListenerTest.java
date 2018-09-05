@@ -32,8 +32,11 @@
  * @library /test/lib
  * @run build TestScaffold VMConnection TargetListener TargetAdapter
  * @run compile -g ListenerTest.java
- * @run driver ListenerTest -connect com.sun.jdi.SocketListen
+ * @run driver ListenerTest
  */
+
+// "@run main/othervm/timeout=3600 -agentlib:jdwp=transport=dt_socket,address=localhost:8000,server=y,suspend=y ListenerTest"
+
 import com.sun.jdi.*;
 import com.sun.jdi.event.*;
 import com.sun.jdi.request.*;
@@ -53,6 +56,14 @@ class ListenerTestTArg {
         for (int i = 0; i < 1000; ++i) {
             System.out.println("Step nr. " + i);
             sleepSome();
+
+            if (i % 100 == 99) {
+                try {
+                    throw new OutOfMemoryError();
+                } catch (Throwable t) {
+                    // Do nothing.
+                }
+            }
         }
     }
 
@@ -77,10 +88,24 @@ public class ListenerTest extends DoDScaffold implements ListenerCallback {
 
     @Override
     public Process startedListening(String address) throws IOException {
+        System.out.println("Debugger listening at " + address);
+
+//        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+//                "-agentlib:jdwp=transport=dt_socket,ondemand=n," +
+//                "server=n,address=" + address + 
+//                ",onthrow=java.lang.OutOfMemoryError,launch=true," + 
+//                "logflags=0xffff,logfile=C:\\priv\\jdwp.log",
+//                ListenerTestTArg.class.getName()).inheritIO();
         ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
-                "-agentlib:jdwp=transport=dt_socket,address=" + address +
-                ",server=n,suspend=n", ListenerTestTArg.class.getName());
-        return pb.start();
+                "-agentlib:jdwp=transport=dt_socket,ondemand=y," + 
+                "logflags=0xffff,logfile=jdwp.log",
+                ListenerTestTArg.class.getName()).inheritIO();
+        Process debuggee = pb.start();
+        sleep(2000);
+        startDebuggingViaJcmd(debuggee.pid(), address, false, 20000);
+        sleep(2000);
+        getDoDInfo(debuggee.pid());
+        return debuggee;
     }
 
     @Override

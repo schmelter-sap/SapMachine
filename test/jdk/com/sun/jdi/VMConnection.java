@@ -295,7 +295,7 @@ class VMConnection {
      *  Needs to be high priority, else debugger may exit before
      *  it can be displayed.
      */
-    private void displayRemoteOutput(final InputStream stream) {
+    protected void displayRemoteOutput(final InputStream stream) {
         Thread thr = new Thread("output reader") {
             public void run() {
                 try {

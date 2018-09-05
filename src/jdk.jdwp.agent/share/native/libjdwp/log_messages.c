@@ -68,7 +68,7 @@ get_time_stamp(char *tbuf, size_t ltbuf)
     /* Break this up so that the format strings are string literals
        and we avoid a compiler warning. */
     (void)strftime(timestamp_prefix, sizeof(timestamp_prefix),
-                "%d.%m.%Y %H:%M:%S", localtime(&t));
+                "%d.%m.%Y %T", localtime(&t));
     (void)strftime(timestamp_postfix, sizeof(timestamp_postfix),
                 "%Z", localtime(&t));
     (void)snprintf(tbuf, ltbuf,

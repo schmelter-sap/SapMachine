@@ -336,13 +336,15 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
 {
     TransportInfo *info;
     jdwpTransportEnv *t;
-    jdwpTransportError rc;
+    jdwpTransportError rc = JDWPTRANSPORT_ERROR_TIMEOUT;
 
     LOG_MISC(("Begin accept thread"));
 
     info = (TransportInfo*)(void*)arg;
     t = info->transport;
-    rc = (*t)->Accept(t, info->timeout, 0);
+    if (!onDemand_isEnabled() || onDemand_notifyWaitingForConnection()) {
+        rc = (*t)->Accept(t, info->timeout, 0);
+    }
 
     /* System property no longer needed */
     setTransportProperty(jni_env, NULL);
@@ -374,7 +376,11 @@ attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
 
     if (onDemand_isEnabled()) {
         jdwpTransportEnv *trans = info->transport;
-        jint err = (*trans)->Attach(trans, info->address, info->timeout, 0);
+        jint err = JDWPTRANSPORT_ERROR_TIMEOUT;
+
+        if (onDemand_notifyWaitingForConnection()) {
+            err = (*trans)->Attach(trans, info->address, info->timeout, 0);
+        }
         if (err != JDWPTRANSPORT_ERROR_NONE) {
             printLastError(trans, err);
             jvmtiDeallocate(info);
@@ -681,6 +687,8 @@ transport_sendPacket(jdwpPacket *packet)
     if (transport != NULL) {
         if ( (*transport)->IsOpen(transport) ) {
             debugMonitorEnter(sendLock);
+            // JDI_ASSERT(packet->type.reply.flags == -128);
+            LOG_MISC(("Writing packet id %d with len %d, error %d", (int)packet->type.reply.len, (int)packet->type.reply.id, (int)packet->type.reply.errorCode));
             err = (*transport)->WritePacket(transport, packet);
             debugMonitorExit(sendLock);
         }
@@ -724,5 +732,7 @@ transport_receivePacket(jdwpPacket *packet)
          */
         return (jint)-1;
     }
+    JDI_ASSERT(packet->type.cmd.flags == 0);
+    LOG_MISC(("Receiving packet id %d with len %d, cmdSet %d, cmd %d", (int)packet->type.cmd.len, (int)packet->type.cmd.id, (int)packet->type.cmd.cmdSet, (int)packet->type.cmd.cmd));
     return 0;
 }

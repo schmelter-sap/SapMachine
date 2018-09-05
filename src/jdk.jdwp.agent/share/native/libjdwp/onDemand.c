@@ -107,7 +107,8 @@ void onDemand_enable() {
   LOG_MISC(("Debugging on demand enabled"));
 }
 
-void onDemand_notifyWaitingForConnection() {
+jboolean onDemand_notifyWaitingForConnection() {
+    jboolean result = JNI_FALSE;
     LOG_MISC(("Notifying debugging connection is (about to be) set up."));
 
     debugMonitorEnter(onDemandMonitor);
@@ -117,9 +118,12 @@ void onDemand_notifyWaitingForConnection() {
     } else {
         onDemandCurrentState = ON_DEMAND_WAITING_FOR_CONNECTION;
         debugMonitorNotifyAll(onDemandMonitor);
+        result = JNI_TRUE;
     }
 
     debugMonitorExit(onDemandMonitor);
+
+    return result;
 }
 
 void onDemand_notifyDebuggingStarted() {
@@ -174,6 +178,7 @@ jboolean onDemand_isEnabled() {
 }
 
 JNIEXPORT char const* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server, jboolean* has_address_override, char* address, jint address_max_size) {
+    LOG_MISC(("Getting config for DoD"));
     debugMonitorEnter(onDemandMonitor);
 
     if (has_is_server_override) {
@@ -198,6 +203,11 @@ JNIEXPORT char const* onDemand_getConfig(jboolean* has_is_server_override, jbool
     }
 
     debugMonitorExit(onDemandMonitor);
+    LOG_MISC(("Got config: has server ovweride %s, is server %s, has address override %s, address %s",
+              has_is_server_override ? (*has_is_server_override ? "y" : "n") : "<unknown>",
+              is_server ? (*is_server ? "y" : "n") : "<unknown>",
+              has_address_override ? (*has_address_override ? "y" : "n") : "<unknown>",
+              (has_address_override && *has_address_override && address && (address_max_size > 0)) ? address : "<unknown"));
 
     return onDemandTransportName;
 }
@@ -236,6 +246,8 @@ JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thr
     if (!enabled) {
       return STARTING_ERROR_DISABLED;
     }
+
+    LOG_MISC(("Starting DoD with timeout %lld, server %s at %s", (long long)timeout, is_server ? "y" : "n", address));
 
     debugMonitorEnter(onDemandMonitor);
 
