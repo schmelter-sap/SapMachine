@@ -1,3 +1,8 @@
+import java.io.IOException;
+
+import jdk.test.lib.JDKToolFinder;
+import jdk.test.lib.process.ProcessTools;
+
 class DebuggerConf {
     public final String connector;
     public final String address;
@@ -30,6 +35,7 @@ public abstract class DoDScaffold extends TestScaffold {
 
     public DoDScaffold(DebuggerConf conf) {
         super(new String[] {"-connect", conf.connector});
+        delayedStart = true;
     }
 
     @Override
@@ -41,5 +47,45 @@ public abstract class DoDScaffold extends TestScaffold {
 
     protected Process getCurrentDebuggee() {
         return null;
+    }
+
+    public static void startDebuggingViaJcmd(long pid, String address, 
+            boolean server, int timeout) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder(
+                JDKToolFinder.getJDKTool("jcmd"),
+                Long.toString(pid),
+                "DoD.start",
+                "address=" + address,
+                "is_server=" + server,
+                "timeout=" + timeout).inheritIO();
+        System.out.println("Starting jcmd via " + pb.command());
+
+        try {
+            pb.start().waitFor();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void getDoDInfo(long pid) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder(
+                JDKToolFinder.getJDKTool("jcmd"),
+                Long.toString(pid),
+                "DoD.info").inheritIO();
+        System.out.println("Starting jcmd via " + pb.command());
+
+        try {
+            pb.start().waitFor();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

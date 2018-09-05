@@ -42,6 +42,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
 {
     int i;
     jdwpError serror = JDWP_ERROR(NONE);
+    LOG_MISC(("Applying %d filter to event request.", (int)filterCount));
 
     for (i = 0; i < filterCount; ++i) {
 
@@ -60,6 +61,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                         eventFilter_setConditionalFilter(node, i, exprID));
+                LOG_MISC(("Applying conditional filter %d to event request.", i));
                 break;
             }
 
@@ -70,6 +72,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                         eventFilter_setCountFilter(node, i, count));
+                LOG_MISC(("Applying count (%d) filter %d to event request.", (int) count, i));
                 break;
             }
 
@@ -80,6 +83,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                         eventFilter_setThreadOnlyFilter(node, i, thread));
+                LOG_MISC(("Applying thread only filter %d to event request.", i));
                 break;
             }
 
@@ -103,6 +107,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                         eventFilter_setLocationOnlyFilter(node, i, clazz, method, location));
+                LOG_MISC(("Applying location only filter %d to event request.", i));
                 break;
             }
 
@@ -117,6 +122,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                         eventFilter_setFieldOnlyFilter(node, i, clazz, field));
+                LOG_MISC(("Applying field only filter %d to event request.", i));
                 break;
             }
 
@@ -127,6 +133,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                         eventFilter_setClassOnlyFilter(node, i, clazz));
+                LOG_MISC(("Applying class (%s) only filter %d to event request.", getClassname(clazz), i)); // Mem leak
                 break;
             }
 
@@ -146,6 +153,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                 serror = map2jdwpError(
                         eventFilter_setExceptionOnlyFilter(node, i,
                                              exception, caught, uncaught));
+                LOG_MISC(("Applying exception only filter (%s) %d to event request.", getClassname(exception), i)); // Mem leak
                 break;
             }
 
@@ -156,6 +164,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                         eventFilter_setInstanceOnlyFilter(node, i, instance));
+                LOG_MISC(("Applying instance only filter %d to event request.", i));
                 break;
             }
 
@@ -167,6 +176,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                 serror = map2jdwpError(
                         eventFilter_setClassMatchFilter(node, i,
                                                                 pattern));
+                LOG_MISC(("Applying class match (%s) filter %d to event request.", pattern, i));
                 break;
             }
 
@@ -177,6 +187,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                         eventFilter_setClassExcludeFilter(node, i, pattern));
+                LOG_MISC(("Applying class exclude (%s) filter %d to event request.", pattern, i));
                 break;
             }
             case JDWP_REQUEST_MODIFIER(Step): {
@@ -194,6 +205,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                     break;
                 serror = map2jdwpError(
                       eventFilter_setStepFilter(node, i, thread, size, depth));
+                LOG_MISC(("Applying step filter %d to event request.", i));
                 break;
             }
             case JDWP_REQUEST_MODIFIER(SourceNameMatch): {
@@ -204,6 +216,7 @@ readAndSetFilters(JNIEnv *env, PacketInputStream *in, HandlerNode *node,
                 }
                 serror = map2jdwpError(
                         eventFilter_setSourceNameMatchFilter(node, i, sourceNamePattern));
+                LOG_MISC(("Applying source name (%s) filter %d to event request.", sourceNamePattern, i));
                 break;
             }
 
@@ -257,6 +270,8 @@ setCommand(PacketInputStream *in, PacketOutputStream *out)
         outStream_setError(out, JDWP_ERROR(INVALID_EVENT_TYPE));
         return JNI_TRUE;
     }
+
+    LOG_MISC(("Setting Event Request for event type %s.", eventText(ei)));
 
     if (ei == EI_VM_INIT) {
         /*

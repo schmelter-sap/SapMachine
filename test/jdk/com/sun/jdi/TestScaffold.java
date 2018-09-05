@@ -39,6 +39,7 @@ abstract public class TestScaffold extends TargetAdapter {
     private boolean redefineAtStart = false;
     private boolean redefineAtEvents = false;
     private boolean redefineAsynchronously = false;
+    protected boolean delayedStart = false;
     private ReferenceType mainStartClass = null;
 
     ThreadReference mainThread;
@@ -682,6 +683,10 @@ abstract public class TestScaffold extends TargetAdapter {
     }
 
     public synchronized ThreadReference waitForVMStart() {
+        if (delayedStart) {
+            return null;
+        }
+
         while ((vmStartThread == null) && !vmDisconnected) {
             try {
                 wait();
