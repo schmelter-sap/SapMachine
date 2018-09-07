@@ -309,4 +309,5 @@ JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thre
     debugMonitorExit(onDemandMonitor);
 
     return result;
+
 }
