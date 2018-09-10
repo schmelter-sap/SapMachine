@@ -29,6 +29,22 @@ class DebuggerConf {
                      ",port=" + port;
         return new DebuggerConf(con, host + ":" + port, true);
     }
+
+    public static DebuggerConf createSocketAttacher(String host) {
+        String con = "com.sun.jdi.SocketAttach:localAddress=" + host;
+        return new DebuggerConf(con, host + ":0", true);
+    }
+
+    public static DebuggerConf createSocketAttacher(int port) {
+        String con = "com.sun.jdi.SocketAttach:port=" + port;
+        return new DebuggerConf(con, "localhost:" + port, true);
+    }
+
+    public static DebuggerConf createSocketAttacher(String host, int port) {
+        String con = "com.sun.jdi.SocketAttach:localAddress=" + host +
+                     ",port=" + port;
+        return new DebuggerConf(con, host + ":" + port, true);
+    }
 }
 
 public abstract class DoDScaffold extends TestScaffold {
@@ -46,6 +62,10 @@ public abstract class DoDScaffold extends TestScaffold {
     }
 
     protected Process getCurrentDebuggee() {
+        return null;
+    }
+
+    public Process startedListening(String address) throws IOException {
         return null;
     }
 
