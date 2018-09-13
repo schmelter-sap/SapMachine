@@ -374,6 +374,11 @@ abstract public class TestScaffold extends TargetAdapter {
                                       String methodName, String signature) {
         startUp(targetName);
         traceln("TS: back from startUp");
+        
+        if (delayedStart) {
+            // suspend running threads to avoid race between suspend upon breakpoint event and resume
+            vm.suspend();
+        }
 
         BreakpointEvent bpr = resumeTo(targetName, methodName,
                                        signature);
