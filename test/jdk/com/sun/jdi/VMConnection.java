@@ -30,15 +30,6 @@ import java.io.*;
 
 
 /**
- * Called by the listening connector when listening was started. The address
- * is the actual address on which is listened. Should return the process
- * object of the debuggee which is connecting.
- */
-interface ListenerCallback {
-    public Process startedListening(String address) throws IOException;
-}
-
-/**
  * Manages a VM conection for the JDI test framework.
  */
 class VMConnection {
@@ -393,5 +384,14 @@ class VMConnection {
         process = null;
 
         return result;
+    }
+
+    /**
+     * Called by the listening connector when listening was started. The address
+     * is the actual address on which is listened. Should return the process
+     * object of the debuggee which is connecting.
+     */
+    public interface ListenerCallback {
+        public Process startedListening(String address) throws IOException;
     }
 }

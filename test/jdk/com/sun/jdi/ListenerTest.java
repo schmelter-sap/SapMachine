@@ -56,14 +56,6 @@ class ListenerTestTArg {
         for (int i = 0; i < 1000; ++i) {
             System.out.println("Step nr. " + i);
             sleepSome();
-
-            if (i % 100 == 99) {
-                try {
-                    throw new OutOfMemoryError();
-                } catch (Throwable t) {
-                    // Do nothing.
-                }
-            }
         }
     }
 
@@ -74,7 +66,8 @@ class ListenerTestTArg {
 
     /********** test program **********/
 
-public class ListenerTest extends DoDScaffold implements ListenerCallback {
+public class ListenerTest extends DoDScaffold 
+                          implements VMConnection.ListenerCallback {
 
     private VMConnection connection;
 

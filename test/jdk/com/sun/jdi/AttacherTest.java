@@ -30,9 +30,8 @@
  * @author Ralf Schmelter
  *
  * @library /test/lib
- * @run build TestScaffold VMConnection TargetListener TargetAdapter
  * @run compile -g AttacherTest.java
- * @run driver AttacherTest
+ * @run main/othervm/timeout=36000 -Dagentlib:jdwp=transport=dt_socket,address=localhost:8000,server=y,suspend=y AttacherTest
  */
 
 import com.sun.jdi.*;
@@ -72,36 +71,36 @@ class AttacherTestTArg {
 
     /********** test program **********/
 
-public class AttacherTest extends DoDScaffold implements ListenerCallback {
+public class AttacherTest extends DoDScaffold {
 
-    private VMConnection connection;
+    private static Process debuggee;
 
-    public AttacherTest(String args[]) {
-        super(DebuggerConf.createSocketAttacher("localhost", 0));
+    public AttacherTest(String host, int port) {
+        super(DebuggerConf.createSocketAttacher(host, port));
     }
 
     public static void main(String[] args) throws Exception {
-        new AttacherTest(args).startTests();
+        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
+                "-agentlib:jdwp=transport=dt_socket,ondemand=y," +
+                "logflags=0xffff,logfile=jdwp.log",
+                AttacherTestTArg.class.getName()).inheritIO();
+        debuggee = pb.start();
+        sleep(5000);
+        startDebuggingViaJcmd(debuggee.pid(), "localhost:0", true, 200000);
+        sleep(2000);
+        DoDInfo info = getDoDInfo(debuggee.pid());
+        new AttacherTest(info.getHost(), info.getPort()).startTests();
     }
 
     /********** test core **********/
 
     protected void runTests() throws Exception {
-        ProcessBuilder pb = ProcessTools.createJavaProcessBuilder(
-                "-agentlib:jdwp=transport=dt_socket,ondemand=y," +
-                "logflags=0xffff,logfile=jdwp.log",
-                AttacherTestTArg.class.getName()).inheritIO();
-        Process debuggee = pb.start();
-        sleep(2000);
-        startDebuggingViaJcmd(debuggee.pid(), "localhost:0", false, 20000);
-        sleep(2000);
-        getDoDInfo(debuggee.pid());
         BreakpointEvent bpe = startTo(AttacherTestTArg.class.getName(),
                                       "sleepSome", "()V");
         System.out.println("Current stack: ");
         System.out.println(bpe.thread().frames());
         System.out.println("Ending process ...");
-        connection.clearProcess().destroy();
+        debuggee.destroy();
 
         listenUntilVMDisconnect();
 

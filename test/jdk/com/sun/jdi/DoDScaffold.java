@@ -1,6 +1,8 @@
 import java.io.IOException;
+import java.util.Arrays;
 
 import jdk.test.lib.JDKToolFinder;
+import jdk.test.lib.process.OutputBuffer;
 import jdk.test.lib.process.ProcessTools;
 
 class DebuggerConf {
@@ -31,7 +33,7 @@ class DebuggerConf {
     }
 
     public static DebuggerConf createSocketAttacher(String host) {
-        String con = "com.sun.jdi.SocketAttach:localAddress=" + host;
+        String con = "com.sun.jdi.SocketAttach:hostname=" + host;
         return new DebuggerConf(con, host + ":0", true);
     }
 
@@ -41,7 +43,7 @@ class DebuggerConf {
     }
 
     public static DebuggerConf createSocketAttacher(String host, int port) {
-        String con = "com.sun.jdi.SocketAttach:localAddress=" + host +
+        String con = "com.sun.jdi.SocketAttach:hostname=" + host +
                      ",port=" + port;
         return new DebuggerConf(con, host + ":" + port, true);
     }
@@ -87,18 +89,24 @@ public abstract class DoDScaffold extends TestScaffold {
         }
     }
 
-    public static void getDoDInfo(long pid) throws IOException {
+    public static DoDInfo getDoDInfo(long pid) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(
                 JDKToolFinder.getJDKTool("jcmd"),
                 Long.toString(pid),
-                "DoD.info").inheritIO();
+                "DoD.info");
         System.out.println("Starting jcmd via " + pb.command());
 
-        try {
-            pb.start().waitFor();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        OutputBuffer out = ProcessTools.getOutput(pb.start());
+        DoDInfo info = new DoDInfo();
+        String addressLine = "The address is ";
+
+        for (String line: out.getStdout().split("[\\n\\r]+")) {
+            if (line.startsWith(addressLine)) {
+                info.currentAddress = line.substring(addressLine.length());
+            }
         }
+
+        return info;
     }
 
     public static void sleep(long ms) {
@@ -106,6 +114,38 @@ public abstract class DoDScaffold extends TestScaffold {
             Thread.sleep(ms);
         } catch (InterruptedException e) {
             e.printStackTrace();
+        }
+    }
+
+    public static class DoDInfo {
+        public String currentAddress;
+
+        public String getHost() {
+            if (currentAddress == null) {
+                return "localhost";
+            }
+
+            int i = currentAddress.indexOf(':');
+
+            if (i < 0) {
+                return currentAddress;
+            }
+
+            return currentAddress.substring(0, i);
+        }
+
+        public int getPort() {
+            if (currentAddress == null) {
+                return 0;
+            }
+
+            int i = currentAddress.indexOf(':');
+
+            if (i < 0) {
+                return 0;
+            }
+
+            return Integer.parseInt(currentAddress.substring(i + 1));
         }
     }
 }
