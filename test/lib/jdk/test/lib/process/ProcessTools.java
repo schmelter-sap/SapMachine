@@ -397,7 +397,7 @@ public final class ProcessTools {
      * @param cmds The command line to execute.
      * @return The output from the process.
      */
-    public static OutputAnalyzer executeProcess(String... cmds) throws Throwable {
+    public static OutputAnalyzer executeProcess(String... cmds) throws Exception {
         return executeProcess(new ProcessBuilder(cmds));
     }
 
@@ -445,7 +445,7 @@ public final class ProcessTools {
      * @return The {@linkplain OutputAnalyzer} instance wrapping the process.
      */
     public static OutputAnalyzer executeCommand(String... cmds)
-            throws Throwable {
+            throws Exception {
         String cmdLine = Arrays.stream(cmds).collect(Collectors.joining(" "));
         System.out.println("Command line: [" + cmdLine + "]");
         OutputAnalyzer analyzer = ProcessTools.executeProcess(cmds);
@@ -463,7 +463,7 @@ public final class ProcessTools {
      * @return The {@linkplain OutputAnalyzer} instance wrapping the process.
      */
     public static OutputAnalyzer executeCommand(ProcessBuilder pb)
-            throws Throwable {
+            throws Exception {
         String cmdLine = pb.command().stream()
                 .map(x -> (x.contains(" ") || x.contains("$"))
                         ? ("'" + x + "'") : x)

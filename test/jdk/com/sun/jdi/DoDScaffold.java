@@ -1,5 +1,6 @@
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 
 import jdk.test.lib.JDKToolFinder;
 import jdk.test.lib.process.OutputBuffer;
@@ -90,20 +91,26 @@ public abstract class DoDScaffold extends TestScaffold {
     }
 
     public static DoDInfo getDoDInfo(long pid) throws IOException {
-        ProcessBuilder pb = new ProcessBuilder(
-                JDKToolFinder.getJDKTool("jcmd"),
-                Long.toString(pid),
-                "DoD.info");
-        System.out.println("Starting jcmd via " + pb.command());
-
-        OutputBuffer out = ProcessTools.getOutput(pb.start());
         DoDInfo info = new DoDInfo();
-        String addressLine = "The address is ";
 
-        for (String line: out.getStdout().split("[\\n\\r]+")) {
-            if (line.startsWith(addressLine)) {
-                info.currentAddress = line.substring(addressLine.length());
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    JDKToolFinder.getJDKTool("jcmd"),
+                    Long.toString(pid),
+                    "DoD.info");
+            System.out.println("Starting jcmd via " + pb.command());
+
+            List<String> lines = ProcessTools.executeCommand(pb).asLines();
+            String addressLine = "The address is ";
+
+            for (String line: lines) {
+                if (line.startsWith(addressLine)) {
+                    info.currentAddress = line.substring(addressLine.length());
+                }
             }
+        }
+        catch (Exception e) {
+            throw new IOException("getting DoDInfo failed", e);
         }
 
         return info;
