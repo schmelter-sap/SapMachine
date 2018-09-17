@@ -26,6 +26,7 @@
 #include "util.h"
 #include "onDemand.h"
 #include "debugInit.h"
+#include "debugLoop.h"
 #include "proc_md.h"
 
 #define ON_DEMAND_KEY "ondemand"
@@ -66,24 +67,21 @@ void onDemand_limitAddress(char const* address) {
 }
 
 void onDemand_setCurrentAddress(char const* address) {
-  debugMonitorEnter(onDemandMonitor);
-  if (strcmp(onDemandTransportName, "dt_socket") == 0) {
-    char* port = strchr(onDemandAddress, ':');
-    port = port ? port + 1 : onDemandAddress;
-    snprintf(port, sizeof(onDemandAddress) - (port - onDemandAddress), "%s", address);
-  } else {
-    snprintf(onDemandAddress, sizeof(onDemandAddress), "%s", address);
-  }
-  onDemandAddress[sizeof(onDemandAddress) - 1] = '\0';
-  debugMonitorExit(onDemandMonitor);
+    debugMonitorEnter(onDemandMonitor);
+    if (strcmp(onDemandTransportName, "dt_socket") == 0) {
+        char* port = strchr(onDemandAddress, ':');
+        port = port ? port + 1 : onDemandAddress;
+        snprintf(port, sizeof(onDemandAddress) - (port - onDemandAddress), "%s", address);
+    }
+    else {
+        snprintf(onDemandAddress, sizeof(onDemandAddress), "%s", address);
+    }
+    onDemandAddress[sizeof(onDemandAddress) - 1] = '\0';
+    debugMonitorExit(onDemandMonitor);
 }
 
 long onDemand_getTimeout() {
-  return onDemandTimeout;
-}
-
-void onDemand_connectionFailed() {
-    printf("Connection failed!");
+    return onDemandTimeout;
 }
 
 void onDemand_init() {
@@ -100,14 +98,18 @@ void onDemand_init() {
 }
 
 void onDemand_enable() {
-  debugMonitorEnter(onDemandMonitor);
-  enabled = JNI_TRUE;
-  debugMonitorExit(onDemandMonitor);
+    debugMonitorEnter(onDemandMonitor);
+    enabled = JNI_TRUE;
+    debugMonitorExit(onDemandMonitor);
 
-  LOG_MISC(("Debugging on demand enabled"));
+    LOG_MISC(("Debugging on demand enabled"));
 }
 
 jboolean onDemand_notifyWaitingForConnection() {
+    if (!onDemand_isEnabled()) {
+        return JNI_TRUE; // True means not to skip the connection.
+    }
+
     jboolean result = JNI_FALSE;
     LOG_MISC(("Notifying debugging connection is (about to be) set up."));
 
@@ -115,7 +117,8 @@ jboolean onDemand_notifyWaitingForConnection() {
 
     if (onDemandCurrentState != ON_DEMAND_STARTING) {
         LOG_MISC(("Unexpected state %d when waiting for connection", onDemandCurrentState));
-    } else {
+    }
+    else {
         onDemandCurrentState = ON_DEMAND_WAITING_FOR_CONNECTION;
         debugMonitorNotifyAll(onDemandMonitor);
         result = JNI_TRUE;
@@ -127,6 +130,10 @@ jboolean onDemand_notifyWaitingForConnection() {
 }
 
 void onDemand_notifyDebuggingStarted() {
+    if (!onDemand_isEnabled()) {
+        return;
+    }
+
     LOG_MISC(("Notifying debugging session started."));
 
     debugMonitorEnter(onDemandMonitor);
@@ -142,32 +149,36 @@ void onDemand_notifyDebuggingStarted() {
 }
 
 jboolean onDemand_waitForNewSession() {
+    JDI_ASSERT(onDemand_isEnabled());
+
     LOG_MISC(("Waiting for new debugging session ..."));
-    jboolean result = JNI_FALSE;
+    jboolean result = JNI_TRUE;
 
     debugMonitorEnter(onDemandMonitor);
 
     if (onDemandCurrentState == ON_DEMAND_INITIAL) {
+        // We don't have to wait, since debugging was just started for us.
         onDemandCurrentState = ON_DEMAND_STARTING;
-        result = JNI_TRUE;
-    } else if (onDemandCurrentState == ON_DEMAND_STOPPING) {
+    } else if ((onDemandCurrentState == ON_DEMAND_STOPPING) || (onDemandCurrentState == ON_DEMAND_CONNECTED) ||
+        (onDemandCurrentState == ON_DEMAND_WAITING_FOR_CONNECTION)) {
         onDemandCurrentState = ON_DEMAND_INACTIVE;
-        debugMonitorNotifyAll(onDemandMonitor);
 
         while (!gdata->vmDead && (onDemandCurrentState == ON_DEMAND_INACTIVE)) {
             debugMonitorWait(onDemandMonitor);
         }
-
-        if (gdata->vmDead) {
-            LOG_MISC(("Found vm already dead while waiting for new debug on demand session"));
-        } else if (onDemandCurrentState == ON_DEMAND_STARTING) {
-            LOG_MISC(("Starting up debugging on demand session ..."));
-            result = JNI_TRUE;
-        } else {
-            LOG_MISC(("Invalid state %d for starting debugging on demand session"));
-        }
+    } else {
+        LOG_MISC(("Invalid state %d for starting debugging on demand session"));
+        result = JNI_FALSE;
     }
 
+    if (gdata->vmDead) {
+        LOG_MISC(("Found vm already dead while waiting for new debug on demand session"));
+        result = JNI_FALSE;
+    } else if (result) {
+        LOG_MISC(("Starting up debugging on demand session ..."));
+    }
+
+    debugMonitorNotifyAll(onDemandMonitor);
     debugMonitorExit(onDemandMonitor);
 
     return result;
@@ -247,13 +258,13 @@ JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thr
       return STARTING_ERROR_DISABLED;
     }
 
-    LOG_MISC(("Starting DoD with timeout %lld, server %s at %s", (long long)timeout, is_server ? "y" : "n", address));
+    LOG_MISC(("Starting DoD with timeout %lld sec, server %s at %s", (long long) timeout, is_server ? "y" : "n", address));
 
     debugMonitorEnter(onDemandMonitor);
 
     if ((onDemandCurrentState == ON_DEMAND_INITIAL) || (onDemandCurrentState == ON_DEMAND_INACTIVE)) {
         jlong newSessionId = onDemandSessionId + 1;
-        onDemandTimeout = (long) timeout;
+        onDemandTimeout = 1000 * (long) timeout;
         onDemandIsServer = is_server;
         snprintf(onDemandAddress, sizeof(onDemandAddress), "%s", address);
         onDemandAddress[sizeof(onDemandAddress) - 1] = '\0';
@@ -264,13 +275,9 @@ JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thr
             debugInit_initForOnDemand(env, thread);
             result = STARTING_ERROR_OK;
         } else {
+            onDemandCurrentState = ON_DEMAND_STARTING;
             debugMonitorNotifyAll(onDemandMonitor);
-
-            if ((onDemandCurrentState == ON_DEMAND_STARTING) && (newSessionId == onDemandSessionId)) {
-                result = STARTING_ERROR_TIMED_OUT;
-            } else {
-                result = STARTING_ERROR_OK;
-            }
+            result = STARTING_ERROR_OK;
         }
     } else {
         result = STARTING_ERROR_WRONG_STATE;
@@ -286,19 +293,21 @@ JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thre
 
     debugMonitorEnter(onDemandMonitor);
 
+    LOG_MISC(("Stopping DoD with timeout %lld sec with session id %lld", (long long) timeout, (long long) session_id));
+
     if (session_id != onDemandSessionId) {
         /* A new session is already there, so stopping worked! */
         result = STOPPING_ERROR_OK;
     } else if ((onDemandCurrentState != ON_DEMAND_CONNECTED) && (onDemandCurrentState != ON_DEMAND_STOPPING)) {
         result = STOPPING_ERROR_WRONG_STATE;
     } else {
-        /* TODO: Implement stopping.*/
-        onDemandTimeout = (long) timeout;
+        onDemandTimeout = 1000* (long) timeout;
         onDemandCurrentState = ON_DEMAND_STOPPING;
+        debugLoop_stop();
 
         debugMonitorNotifyAll(onDemandMonitor);
         debugMonitorTimedWait(onDemandMonitor, timeout);
-
+		
         if ((session_id == onDemandSessionId) && (onDemandCurrentState == ON_DEMAND_STOPPING)) {
             result = STARTING_ERROR_TIMED_OUT;
         } else {

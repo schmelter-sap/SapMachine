@@ -38,7 +38,6 @@ void onDemand_notifyDebuggingStarted();
 jboolean onDemand_waitForNewSession();
 jboolean onDemand_isEnabled();
 long onDemand_getTimeout();
-void onDemand_connectionFailed();
 
 /* Exteneral API */
 typedef enum {

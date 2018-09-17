@@ -817,7 +817,7 @@ debugInit_reset(JNIEnv *env)
      * If it's a client, then we've cleaned up some (more should be added
      * later) and we're done.
      */
-    if (isServer) {
+    if (isServer || onDemand_isEnabled()) {
         arg.isServer = JNI_TRUE;
         arg.error = JDWP_ERROR(NONE);
         arg.startCount = 0;

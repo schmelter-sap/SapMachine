@@ -342,7 +342,7 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
 
     info = (TransportInfo*)(void*)arg;
     t = info->transport;
-    if (!onDemand_isEnabled() || onDemand_notifyWaitingForConnection()) {
+    if (onDemand_notifyWaitingForConnection()) {
         rc = (*t)->Accept(t, info->timeout, 0);
     }
 
@@ -359,6 +359,9 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
         if (!onDemand_isEnabled()) {
             EXIT_ERROR(JVMTI_ERROR_NONE, "could not connect, timeout or fatal error");
         } else if(!gdata->vmDead) {
+            if (onDemand_isEnabled()) {
+                transport = t; // We have to save the transport even on error, since we might try again.
+            }
             debugInit_reset(getEnv());
         }
     } else {
@@ -386,6 +389,9 @@ attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
             jvmtiDeallocate(info);
             (*trans)->StopListening(trans);
             if (!gdata->vmDead) {
+                if (onDemand_isEnabled()) {
+                    transport = info->transport; // We have to save the transport even on error, since we might try again.
+                }
                 debugInit_reset(getEnv());
             }
             return;

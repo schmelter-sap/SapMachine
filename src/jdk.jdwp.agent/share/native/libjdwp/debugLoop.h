@@ -29,5 +29,6 @@
 void debugLoop_initialize(void);
 void debugLoop_run(void);
 void debugLoop_sync(void);
+void debugLoop_stop(void);
 
 #endif

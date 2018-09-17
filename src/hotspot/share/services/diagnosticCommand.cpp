@@ -1221,7 +1221,7 @@ void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
 DebugOnDemandStartDCmd::DebugOnDemandStartDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap),
   _address("address", "The address to connect to (in client mode) or the address to listen on (in server mode)", "STRING",  true),
   _is_server("is_server", "If true we use server mode and client mode otherwise", "BOOLEAN", true, "true"),
-  _timeout("timeout", "The timeout in milliseconds are which the connect is treated as failed", "INT", true, "1000000") {
+  _timeout("timeout", "The timeout in seconds are which the connect is treated as failed", "INT", true, "60") {
   _dcmdparser.add_dcmd_option(&_address);
   _dcmdparser.add_dcmd_option(&_is_server);
   _dcmdparser.add_dcmd_option(&_timeout);
@@ -1240,6 +1240,11 @@ int DebugOnDemandStartDCmd::num_arguments() {
 }
 
 void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
+  if (_timeout.value() <= 0) {
+     output()->print_cr("timeout must be > 0");
+     return;
+  }
+
   JavaThread* thread = (JavaThread*) THREAD;
   jthread jt = JNIHandles::make_local(thread->threadObj());
 

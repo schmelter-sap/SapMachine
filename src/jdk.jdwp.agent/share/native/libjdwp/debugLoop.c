@@ -310,3 +310,7 @@ notifyTransportError(void) {
     debugMonitorNotify(cmdQueueLock);
     debugMonitorExit(cmdQueueLock);
 }
+
+void debugLoop_stop(void) {
+	notifyTransportError();
+}
