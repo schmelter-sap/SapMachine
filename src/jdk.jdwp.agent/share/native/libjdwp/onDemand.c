@@ -148,6 +148,21 @@ void onDemand_notifyDebuggingStarted() {
     debugMonitorExit(onDemandMonitor);
 }
 
+void onDemand_notifyTransportListenFailed() {
+    if (!onDemand_isEnabled()) {
+        return;
+    }
+
+    LOG_MISC(("Notifying the transport listen operation failed."));
+    JDI_ASSERT(onDemandCurrentState == ON_DEMAND_STARTING);
+
+    debugMonitorEnter(onDemandMonitor);
+    onDemandCurrentState = ON_DEMAND_STOPPING;
+    debugMonitorNotifyAll(onDemandMonitor);
+
+    debugMonitorExit(onDemandMonitor);
+}
+
 jboolean onDemand_waitForNewSession() {
     JDI_ASSERT(onDemand_isEnabled());
 

@@ -332,6 +332,17 @@ transport_waitForConnection(void)
 }
 
 static void JNICALL
+retryThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
+{
+    LOG_MISC(("Start retry thread"));
+
+    onDemand_notifyTransportListenFailed();
+    debugInit_startTransportForOnDemand((void*) transport);
+
+    LOG_MISC(("End retry thread"));
+}
+
+static void JNICALL
 acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
 {
     TransportInfo *info;
@@ -573,6 +584,15 @@ transport_startTransport(jboolean isServer, char *name, char *address,
         if (err != JDWPTRANSPORT_ERROR_NONE) {
             printLastError(trans, err);
             serror = JDWP_ERROR(TRANSPORT_INIT);
+
+            if (onDemand_isEnabled()) {
+                // We have to retry.
+                transport = trans;
+                error = spawnNewThread(&retryThread, NULL, "JDWP retry thread");
+                // Return, so we don't free the transport properties. Might be a small leak.
+                return serror;
+            }
+
             goto handleError;
         }
 

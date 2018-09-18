@@ -594,6 +594,11 @@ startTransport(void *item, void *arg)
     return JNI_TRUE;   /* Always continue, even if there was an error */
 }
 
+void debugInit_startTransportForOnDemand(void *transport) {
+    EnumerateArg arg;
+    (void) bagEnumerateOver(transports, startTransport, &arg);
+}
+
 static void
 signalInitComplete(void)
 {
@@ -724,6 +729,7 @@ initialize(JNIEnv *env, jthread thread, EventIndex triggering_ei)
     debugDispatch_initialize();
     classTrack_initialize(env);
     debugLoop_initialize();
+    eventHandler_initialize(currentSessionID);
 
     initMonitor = debugMonitorCreate("JDWP Initialization Monitor");
 
@@ -747,8 +753,6 @@ initialize(JNIEnv *env, jthread thread, EventIndex triggering_ei)
         initOnStartup) {
         EXIT_ERROR(map2jvmtiError(arg.error), "No transports initialized");
     }
-
-    eventHandler_initialize(currentSessionID);
 
     signalInitComplete();
 

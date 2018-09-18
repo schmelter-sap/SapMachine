@@ -35,6 +35,7 @@ void onDemand_init();
 void onDemand_enable();
 jboolean onDemand_notifyWaitingForConnection();
 void onDemand_notifyDebuggingStarted();
+void onDemand_notifyTransportListenFailed();
 jboolean onDemand_waitForNewSession();
 jboolean onDemand_isEnabled();
 long onDemand_getTimeout();
