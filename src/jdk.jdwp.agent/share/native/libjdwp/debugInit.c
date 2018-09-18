@@ -367,15 +367,15 @@ DEF_Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
     }
 
     /* Set callbacks just for 3 functions */
-    (void) memset(&(gdata->callbacks), 0, sizeof(gdata->callbacks));
-    gdata->callbacks.VMInit = &cbEarlyVMInit;
-    gdata->callbacks.VMDeath = &cbEarlyVMDeath;
-    gdata->callbacks.Exception = &cbEarlyException;
-    error = JVMTI_FUNC_PTR(gdata->jvmti, SetEventCallbacks)
-        (gdata->jvmti, &(gdata->callbacks), sizeof(gdata->callbacks));
+    (void)memset(&(gdata->callbacks),0,sizeof(gdata->callbacks));
+    gdata->callbacks.VMInit             = &cbEarlyVMInit;
+    gdata->callbacks.VMDeath            = &cbEarlyVMDeath;
+    gdata->callbacks.Exception  = &cbEarlyException;
+    error = JVMTI_FUNC_PTR(gdata->jvmti,SetEventCallbacks)
+                (gdata->jvmti, &(gdata->callbacks), sizeof(gdata->callbacks));
     if (error != JVMTI_ERROR_NONE) {
         ERROR_MESSAGE(("JDWP unable to set JVMTI event callbacks: %s(%d)",
-                       jvmtiErrorText(error), error));
+                        jvmtiErrorText(error), error));
         return JNI_ERR;
     }
 
