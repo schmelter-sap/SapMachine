@@ -127,7 +127,7 @@ void DCmdRegistrant::register_dcmds(){
   // Debug on demand
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandInfoDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStartDCmd>(full_export, true, false));
-  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStopDCmd>(full_export, true, false));
+  // DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStopDCmd>(full_export, true, false));
 }
 
 #ifndef HAVE_EXTRA_DCMD
