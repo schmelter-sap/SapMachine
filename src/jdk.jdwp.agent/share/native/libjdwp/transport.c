@@ -397,7 +397,6 @@ attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
         }
         if (err != JDWPTRANSPORT_ERROR_NONE) {
             printLastError(trans, err);
-            jvmtiDeallocate(info);
             (*trans)->StopListening(trans);
             if (!gdata->vmDead) {
                 if (onDemand_isEnabled()) {
@@ -405,6 +404,7 @@ attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
                 }
                 debugInit_reset(getEnv());
             }
+            jvmtiDeallocate(info);
             return;
         }
     }
