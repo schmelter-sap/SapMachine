@@ -1,12 +1,13 @@
 #!/usr/bin/env expect
 
 set timeout -1
+set prog_name [lindex $argv 0]
 
 spawn ./images/jdk/bin/jdb -connect com.sun.jdi.SocketListen:port=0
 set jdb_id $spawn_id
 expect -re {Listening at address: ([^\r\n]*)}
 set listen_address $expect_out(1,string)
-spawn ./images/jdk/bin/jcmd.exe InfLoop DoD.start address=$listen_address is_server=false timeout=10
+spawn ./images/jdk/bin/jcmd.exe $prog_name DoD.start address=$listen_address is_server=false timeout=10
 set jcmd_id $spawn_id
 send -i $jdb_id "suspend\n"
 send -i $jdb_id "threads\n"
