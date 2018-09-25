@@ -1,16 +1,87 @@
 #!/usr/bin/env expect
 
-set timeout -1
-set prog_name [lindex $argv 0]
+set prog_id [lindex $argv 0]
+set jcmd_path ./images/jdk/bin/jcmd.exe
+set jdb_path ./images/jdk/bin/jdb.exe
 
-spawn ./images/jdk/bin/jdb -connect com.sun.jdi.SocketListen:port=0
-set jdb_id $spawn_id
-expect -re {Listening at address: ([^\r\n]*)}
-set listen_address $expect_out(1,string)
-spawn ./images/jdk/bin/jcmd.exe $prog_name DoD.start address=$listen_address is_server=false timeout=10
-set jcmd_id $spawn_id
-send -i $jdb_id "suspend\n"
-send -i $jdb_id "threads\n"
-send -i $jdb_id "quit\n"
-expect -i $jdb_id eof
-expect -i $jcmd_id eof
+set timeout -1
+
+proc get_listen_port_from_debuggee {wait_timeout} {
+  global prog_id jcmd_path
+ 
+  set start_time [clock milliseconds]
+
+  while {[clock milliseconds] - $start_time <= [expr $wait_timeout * 1000]} {
+    spawn $jcmd_path $prog_id DoD.info
+	expect {
+	  -re {The address is [^0-9\r\n]*:([0-9]*)} {return $expect_out(1,string)}
+	  eof {after 100}
+    }
+  }
+  
+  puts "Could not get the listening address"
+  exit 1
+}
+
+proc wait_for_debugging_to_be_inactive {wait_timeout} {
+  global prog_id jcmd_path
+ 
+  set start_time [clock milliseconds]
+  set is_initial false
+
+  while {[clock milliseconds] - $start_time <= [expr $wait_timeout * 1000]} {
+    spawn $jcmd_path $prog_id DoD.info
+	expect {
+	  "It is currently in the initial state and was not used yet." {set is_initial true}
+	  "It is currently inactive, but was used before." {set is_initial true}
+	  eof {}
+	}
+	if {$is_initial == true} {
+	  puts "Is initial"
+	  return;
+	}
+  }
+  
+  puts "Failed to wait for debugging to be inactive."
+  exit 1
+}
+
+proc start_debugging {address is_server dod_timeout wait_timeout} {
+  global prog_id jcmd_path session
+
+  wait_for_debugging_to_be_inactive $wait_timeout
+  spawn $jcmd_path $prog_id DoD.start address=$address is_server=$is_server timeout=$dod_timeout
+  expect {
+	-r {Started debug session ([0-9]*)} {set session $expect_out(1,string)}
+	eof {puts "Failed to start debugging"; exit 1}
+  }  
+}
+
+proc attach_jdb_show_threads_and_detach {wait_timeout} {
+  global prog_id jcmd_path jdb_path session
+
+  set port [get_listen_port_from_debuggee $wait_timeout]
+  spawn $jdb_path -connect com.sun.jdi.SocketAttach:port=$port
+  send "suspend\n"
+  send "threads\n"
+  send "quit\n"
+  expect eof
+}
+
+
+start_debugging localhost:0 true 10 10
+attach_jdb_show_threads_and_detach 10
+
+# set listen_address [get_listen_address_from_debuggee 10]
+
+# spawn ./images/jdk/bin/jdb -connect com.sun.jdi.SocketListen:port=0
+# set jdb_id $spawn_id
+# expect -re {Listening at address: ([^\r\n]*)}
+# set listen_address $expect_out(1,string)
+# spawn $jcmd_path $prog_id DoD.start address=$listen_address is_server=false timeout=10
+# set jcmd_id $spawn_id
+# send -i $jdb_id "suspend\n"
+# send -i $jdb_id "threads\n"
+# send -i $jdb_id "quit\n"
+# expect -i $jdb_id eof
+# expect -i $jcmd_id eof
