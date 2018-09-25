@@ -308,6 +308,10 @@ JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thre
 
     debugMonitorEnter(onDemandMonitor);
 
+    if (!enabled) {
+        return STOPPING_ERROR_DISABLED;
+    }
+
     LOG_MISC(("Stopping DoD with timeout %lld sec with session id %lld", (long long) timeout, (long long) session_id));
 
     if (session_id != onDemandSessionId) {
@@ -324,9 +328,9 @@ JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thre
         debugMonitorTimedWait(onDemandMonitor, timeout);
 		
         if ((session_id == onDemandSessionId) && (onDemandCurrentState == ON_DEMAND_STOPPING)) {
-            result = STARTING_ERROR_TIMED_OUT;
+            result = STOPPING_ERROR_TIMED_OUT;
         } else {
-            result = STARTING_ERROR_OK;
+            result = STOPPING_ERROR_OK;
         }
     }
 

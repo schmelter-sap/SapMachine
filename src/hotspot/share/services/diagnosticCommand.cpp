@@ -1077,8 +1077,7 @@ typedef enum {
 typedef enum {
   STARTING_ERROR_OK,
   STARTING_ERROR_DISABLED,
-  STARTING_ERROR_WRONG_STATE,
-  STARTING_ERROR_TIMED_OUT
+  STARTING_ERROR_WRONG_STATE
 } onDemandStartingError;
 
 typedef enum {
@@ -1206,7 +1205,9 @@ void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
           } else if (state == ON_DEMAND_CONNECTED) {
             output()->print_cr("The debugger is currently attached and debugging.");
           } else if (state == ON_DEMAND_STOPPING) {
-            output()->print_cr("The debugging sysgtem is currently stopping.");
+            output()->print_cr("The debugging system is currently stopping.");
+          } else {
+            output()->print_cr("The debugging system is in an unexpected state %d.", state);
           }
           output()->print_cr("The mode is %s.", is_server ? "server" : "client");
           output()->print_cr("The address is %s", address);
@@ -1252,7 +1253,16 @@ void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
 
   jlong session_id;
   onDemandStartingError error = onDemand_startDebugging(thread->jni_environment(), jt, _timeout.value(), _is_server.value() ? JNI_TRUE : JNI_FALSE, _address.value(), &session_id);
-  output()->print_cr("Got %d for session " JLONG_FORMAT, error, session_id);
+
+  if (error == STARTING_ERROR_OK) {
+    output()->print_cr("Started debug session " JLONG_FORMAT, error, session_id);
+  } else if (error == STARTING_ERROR_DISABLED) {
+    output()->print_cr("Starting debug session failed, since debug on demand is disabled.");
+  } else if (error == STARTING_ERROR_WRONG_STATE) {
+    output()->print_cr("Starting debug session failed, since debug on demand was in the wrong state.");
+  } else {
+    output()->print_cr("Starting debug session failed because of unknown error %d.", error);
+  }
 }
 
 DebugOnDemandStopDCmd::DebugOnDemandStopDCmd(outputStream* output, bool heap) : DCmd(output, heap) {

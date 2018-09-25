@@ -54,8 +54,7 @@ typedef enum {
 typedef enum {
     STARTING_ERROR_OK,
     STARTING_ERROR_DISABLED,
-    STARTING_ERROR_WRONG_STATE,
-    STARTING_ERROR_TIMED_OUT
+    STARTING_ERROR_WRONG_STATE
 } onDemandStartingError;
 
 typedef enum {
