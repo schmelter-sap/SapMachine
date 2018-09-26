@@ -1255,7 +1255,7 @@ void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
   onDemandStartingError error = onDemand_startDebugging(thread->jni_environment(), jt, _timeout.value(), _is_server.value() ? JNI_TRUE : JNI_FALSE, _address.value(), &session_id);
 
   if (error == STARTING_ERROR_OK) {
-    output()->print_cr("Started debug session " JLONG_FORMAT, session_id);
+    output()->print_cr("Started debug session " JLONG_FORMAT ".", session_id);
   } else if (error == STARTING_ERROR_DISABLED) {
     output()->print_cr("Starting debug session failed, since debug on demand is disabled.");
   } else if (error == STARTING_ERROR_WRONG_STATE) {

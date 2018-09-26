@@ -5,6 +5,8 @@ set jcmd_path ./images/jdk/bin/jcmd.exe
 set jdb_path ./images/jdk/bin/jdb.exe
 
 set timeout -1
+set wait_timeout 10
+set port 8000
 
 proc fail {msg} {
   puts $msg
@@ -19,8 +21,8 @@ proc get_listen_port_from_debuggee {wait_timeout} {
   while {[clock milliseconds] - $start_time <= [expr $wait_timeout * 1000]} {
     spawn $jcmd_path $prog_id DoD.info
 	expect {
-	  -re {The address is [^0-9\r\n]*:([0-9]*)} {return $expect_out(1,string)}
-	  eof {after 100}
+	  -re {The address is [^0-9\r\n]*:([0-9]*)} {expect eof; wait; return $expect_out(1,string)}
+	  eof {wait; after 100}
     }
   }
   
@@ -36,9 +38,9 @@ proc wait_for_debugging_to_be_inactive {wait_timeout} {
   while {[clock milliseconds] - $start_time <= [expr $wait_timeout * 1000]} {
     spawn $jcmd_path $prog_id DoD.info
 	expect {
-	  "It is currently in the initial state and was not used yet." {set is_initial true}
-	  "It is currently inactive, but was used before." {set is_initial true}
-	  eof {}
+	  "It is currently in the initial state and was not used yet." {expect eof; wait; set is_initial true}
+	  "It is currently inactive, but was used before." {expect eof; wait; set is_initial true}
+	  eof {wait; after 100}
 	}
 	if {$is_initial == true} {
 	  puts "Is initial"
@@ -79,18 +81,15 @@ proc check_debugging_is_active {} {
   
   spawn $jcmd_path $prog_id DoD.info
   expect {
-    "The debugger is currently attached and debugging." {puts "Debugger still active"}
+    "The debugger is currently attached and debugging." {expect eof; wait; puts "Debugger still active"}
     eof {fail "Unexpected eof when checking if debugger still active"}
   }
-  expect eof
 }
 
 proc quit_jdb {jdb_id} {
   send -i $jdb_id "quit\n"
-  expect {
-    -i $jdb_id
-	eof
-  }
+  expect -i $jdb_id eof
+  wait -i $jdb_id
 }
 
 proc start_debugging {address is_server dod_timeout wait_timeout} {
@@ -99,7 +98,7 @@ proc start_debugging {address is_server dod_timeout wait_timeout} {
   wait_for_debugging_to_be_inactive $wait_timeout
   spawn $jcmd_path $prog_id DoD.start address=$address is_server=$is_server timeout=$dod_timeout
   expect {
-	-r {Started debug session ([0-9]*)} {set session $expect_out(1,string)}
+	-r {Started debug session ([0-9]*)} {expect eof; wait; set session $expect_out(1,string)}
 	eof {fail "Failed to start debugging"}
   }  
 }
@@ -135,20 +134,72 @@ proc listen_on_jdb_to_work_and_detach {jdb_procs wait_timeout} {
   quit_jdb $jdb_id  
 }
 
+proc detach_after_connect {wait_timeout} {
+  start_debugging localhost:0 true 10 $wait_timeout
+  set port [get_listen_port_from_debuggee $wait_timeout]
+  spawn telnet localhost $port
+  send "\n"
+  expect eof
+  wait
+  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
+}
 
-attach_jdb_do_work_and_detach {show_threads print_expr} 10
-listen_on_jdb_to_work_and_detach {show_threads print_expr} 10
+proc detach_after_handshake {wait_timeout} {
+  start_debugging localhost:0 true 10 $wait_timeout
+  set port [get_listen_port_from_debuggee $wait_timeout]
+  spawn telnet localhost $port
+  expect "Escape character is "
+  send "JDWP-Handshake\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+  expect eof
+  wait
+  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
+}
 
-# set listen_address [get_listen_address_from_debuggee 10]
+proc shutdown_after_connect {wait_timeout} {
+  global port
+  
+  spawn nc -l $port
+  set nc_id $spawn_id
+  start_debugging localhost:$port false 10 $wait_timeout
+  send -i $nc_id "FAKE-Handshake\n"
+  expect -i $nc_id eof
+  wait -i $nc_id
+  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
+}
 
-# spawn ./images/jdk/bin/jdb -connect com.sun.jdi.SocketListen:port=0
-# set jdb_id $spawn_id
-# expect -re {Listening at address: ([^\r\n]*)}
-# set listen_address $expect_out(1,string)
-# spawn $jcmd_path $prog_id DoD.start address=$listen_address is_server=false timeout=10
-# set jcmd_id $spawn_id
-# send -i $jdb_id "suspend\n"
-# send -i $jdb_id "threads\n"
-# send -i $jdb_id "quit\n"
-# expect -i $jdb_id eof
-# expect -i $jcmd_id eof
+proc shutdown_after_handshake {wait_timeout} {
+  global port
+  
+  spawn nc -l $port
+  set nc_id $spawn_id
+  start_debugging localhost:$port false 10 $wait_timeout
+  send -i $nc_id "JDWP-Handshake\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+  expect -i $nc_id eof
+  wait -i $nc_id
+  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
+}
+
+proc execute_test {test_id wait_timeout} {
+  puts "Executing test $test_id"
+
+  switch $test_id {
+    "0" {attach_jdb_do_work_and_detach {show_threads print_expr} $wait_timeout}
+    "1" {listen_on_jdb_to_work_and_detach {show_threads print_expr} $wait_timeout}
+    "2" {detach_after_connect $wait_timeout}
+	"3" {detach_after_handshake $wait_timeout}
+	"4" {shutdown_after_connect $wait_timeout}
+	"5" {shutdown_after_handshake $wait_timeout}
+  }
+}
+
+if {[llength $argv] > 1} {
+  execute_test [lindex $argv 1] 10
+} else {
+  set run 0
+  
+  while {1} {
+    execute_test [expr int(rand() * 6)] 10
+	set run [expr $run + 1]
+	puts "\n***** Finished run $run ******\n"
+  }
+}
