@@ -1,8 +1,8 @@
 #!/usr/bin/env expect
 
 set prog_id [lindex $argv 0]
-set jcmd_path ./images/jdk/bin/jcmd.exe
-set jdb_path ./images/jdk/bin/jdb.exe
+set jcmd_path ./images/jdk/bin/jcmd
+set jdb_path ./images/jdk/bin/jdb
 
 set timeout -1
 set wait_timeout 10
