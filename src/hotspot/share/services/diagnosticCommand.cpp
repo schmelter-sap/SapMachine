@@ -124,10 +124,12 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JMXStopRemoteDCmd>(jmx_agent_export_flags, true,false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JMXStatusDCmd>(jmx_agent_export_flags, true,false));
 
-  // Debug on demand
+  // Debug on demand (only make sense with JVMTI since the agentlib needs it).
+#if INCLUDE_JVMTI
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandInfoDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStartDCmd>(full_export, true, false));
   // DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStopDCmd>(full_export, true, false));
+#endif
 }
 
 #ifndef HAVE_EXTRA_DCMD
