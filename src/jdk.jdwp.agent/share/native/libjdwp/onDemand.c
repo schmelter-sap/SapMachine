@@ -106,11 +106,12 @@ void onDemand_enable() {
 }
 
 jboolean onDemand_notifyWaitingForConnection() {
+    jboolean result = JNI_FALSE;
+
     if (!onDemand_isEnabled()) {
         return JNI_TRUE; // True means not to skip the connection.
     }
 
-    jboolean result = JNI_FALSE;
     LOG_MISC(("Notifying debugging connection is (about to be) set up."));
 
     debugMonitorEnter(onDemandMonitor);

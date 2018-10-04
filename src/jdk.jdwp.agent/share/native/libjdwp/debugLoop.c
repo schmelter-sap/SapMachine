@@ -312,5 +312,5 @@ notifyTransportError(void) {
 }
 
 void debugLoop_stop(void) {
-	notifyTransportError();
+    notifyTransportError();
 }
