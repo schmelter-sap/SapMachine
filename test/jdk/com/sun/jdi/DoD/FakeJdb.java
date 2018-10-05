@@ -23,7 +23,7 @@ public class FakeJdb {
 
         if ("server".equals(args[0])) {
             ServerSocket ss = new ServerSocket(port);
-            System.out.println("FakeJDB ist listening of local port " +
+            System.out.println("Using port " +
                     ss.getLocalPort());
             s = ss.accept();
             ss.close();
@@ -48,7 +48,7 @@ public class FakeJdb {
                 break;
 
             case "wrong-packet":
-                os.write(handshake.length);
+                os.write(handshake);
                 is.readNBytes(handshake, 0, handshake.length);
                 os.write(new byte[13]);
                 s.close();

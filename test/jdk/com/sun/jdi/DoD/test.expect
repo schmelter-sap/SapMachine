@@ -160,27 +160,18 @@ proc connect_with_fake_jdb {command wait_timeout} {
   wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
 }
 
-proc shutdown_after_connect {wait_timeout} {
-  global port
-  
-  spawn nc -l $port
-  set nc_id $spawn_id
-  start_debugging localhost:$port false 10 $wait_timeout
-  send -i $nc_id "FAKE-Handshake\n"
-  expect -i $nc_id eof
-  wait -i $nc_id
-  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
-}
+proc attach_to_fake_jdb {command wait_timeout} {
+  global java_path
 
-proc shutdown_after_handshake {wait_timeout} {
-  global port
-  
-  spawn nc -l $port
-  set nc_id $spawn_id
+  spawn $java_path -cp . FakeJdb server 0 $command
+  expect {
+    -re {Using port ([0-9]*)} {set port $expect_out(1,string)}
+    eof {fail "Missing output from fake jdb"}
+  }
+  set fake_id $spawn_id
   start_debugging localhost:$port false 10 $wait_timeout
-  send -i $nc_id "JDWP-Handshake\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
-  expect -i $nc_id eof
-  wait -i $nc_id
+  expect -i $fake_id eof
+  wait -i $fake_id
   wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
 }
 
@@ -197,8 +188,9 @@ proc execute_test {test_id wait_timeout} {
     "4" {connect_with_fake_jdb direct-disconnect $wait_timeout}
     "5" {connect_with_fake_jdb wrong-handshake $wait_timeout}
     "6" {connect_with_fake_jdb wrong-packet $wait_timeout}
-    "7" {shutdown_after_connect $wait_timeout}
-    "8" {shutdown_after_handshake $wait_timeout}
+    "7" {attach_to_fake_jdb direct-disconnect $wait_timeout}
+    "8" {attach_to_fake_jdb wrong-handshake $wait_timeout}
+    "9" {attach_to_fake_jdb wrong-packet $wait_timeout}
   }
 }
 
@@ -226,7 +218,7 @@ if {[llength $argv] < 2} {
 
     while {1} {
       if {[lindex $argv 1] == "all"} {
-        execute_test [expr int(rand() * 8)] 10
+        execute_test [expr int(rand() * 10)] 10
       } else {
         execute_test [lindex $argv 1] 10
       }
