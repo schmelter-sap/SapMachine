@@ -86,10 +86,33 @@ proc check_debugging_is_active {} {
   }
 }
 
-proc quit_jdb {jdb_id} {
-  send -i $jdb_id "quit\n"
+proc wait_for_jdb_quit {jdb_id} {
   expect -i $jdb_id eof
   wait -i $jdb_id
+}
+
+proc quit_jdb {jdb_id} {
+  send -i $jdb_id "quit\n"
+  wait_for_jdb_quit $jdb_id
+}
+
+proc end_jdb_by_quit {jdb_id} {
+  check_debugging_is_active
+  quit_jdb $jdb_id
+}
+
+proc stop_debugging_via_jcmd {} {
+  global prog_id jcmd_path
+
+  spawn $jcmd_path $prog_id DoD.stop
+  expect eof
+  wait
+}
+
+proc end_jdb_by_stop {jdb_id} {
+  check_debugging_is_active
+  stop_debugging_via_jcmd
+  wait_for_jdb_quit $jdb_id
 }
 
 proc start_debugging {address is_server dod_timeout wait_timeout} {
@@ -113,8 +136,6 @@ proc attach_jdb_do_work_and_detach {jdb_procs wait_timeout} {
   foreach jdb_proc $jdb_procs {
     $jdb_proc $jdb_id
   }
-  check_debugging_is_active
-  quit_jdb $jdb_id  
 }
 
 proc listen_on_jdb_to_work_and_detach {jdb_procs wait_timeout} {
@@ -130,8 +151,6 @@ proc listen_on_jdb_to_work_and_detach {jdb_procs wait_timeout} {
   foreach jdb_proc $jdb_procs {
     $jdb_proc $jdb_id
   }
-  check_debugging_is_active
-  quit_jdb $jdb_id  
 }
 
 proc detach_after_connect {wait_timeout} {
@@ -181,14 +200,18 @@ proc shutdown_after_handshake {wait_timeout} {
 
 proc execute_test {test_id wait_timeout} {
   puts "Executing test $test_id"
+  set jdb_cmds_1 {show_threads print_expr end_jdb_by_quit}
+  set jdb_cmds_1 {show_threads print_expr end_jdb_by_stop}
 
   switch $test_id {
-    "0" {attach_jdb_do_work_and_detach {show_threads print_expr} $wait_timeout}
-    "1" {listen_on_jdb_to_work_and_detach {show_threads print_expr} $wait_timeout}
-    "2" {detach_after_connect $wait_timeout}
-	"3" {detach_after_handshake $wait_timeout}
-	"4" {shutdown_after_connect $wait_timeout}
-	"5" {shutdown_after_handshake $wait_timeout}
+    "0" {attach_jdb_do_work_and_detach $jdb_cmds_1 $wait_timeout}
+    "1" {listen_on_jdb_to_work_and_detach $jdb_cmds_1 $wait_timeout}
+    "2" {attach_jdb_do_work_and_detach $jdb_cmds_1 $wait_timeout}
+    "3" {listen_on_jdb_to_work_and_detach $jdb_cmds_1 $wait_timeout}
+    "4" {detach_after_connect $wait_timeout}
+    "5" {detach_after_handshake $wait_timeout}
+    "6" {shutdown_after_connect $wait_timeout}
+    "7" {shutdown_after_handshake $wait_timeout}
   }
 }
 
@@ -198,7 +221,7 @@ if {[llength $argv] > 1} {
   set run 0
   
   while {1} {
-    execute_test [expr int(rand() * 6)] 10
+    execute_test [expr int(rand() * 8)] 10
 	set run [expr $run + 1]
 	puts "\n***** Finished run $run ******\n"
   }
