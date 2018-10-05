@@ -149,22 +149,12 @@ proc listen_on_jdb_to_work_and_detach {jdb_procs wait_timeout} {
   }
 }
 
-proc detach_after_connect {wait_timeout} {
-  start_debugging localhost:0 true 10 $wait_timeout
-  set port [get_listen_port_from_debuggee $wait_timeout]
-  spawn telnet localhost $port
-  send "\n"
-  expect eof
-  wait
-  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
-}
+proc connect_with_fake_jdb {command wait_timeout} {
+  global java_path
 
-proc detach_after_handshake {wait_timeout} {
   start_debugging localhost:0 true 10 $wait_timeout
   set port [get_listen_port_from_debuggee $wait_timeout]
-  spawn telnet localhost $port
-  expect "Escape character is "
-  send "JDWP-Handshake\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\n"
+  spawn $java_path -cp . FakeJdb client $port $command
   expect eof
   wait
   wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
@@ -204,10 +194,11 @@ proc execute_test {test_id wait_timeout} {
     "1" {listen_on_jdb_to_work_and_detach $jdb_cmds_1 $wait_timeout}
     "2" {attach_jdb_do_work_and_detach $jdb_cmds_1 $wait_timeout}
     "3" {listen_on_jdb_to_work_and_detach $jdb_cmds_1 $wait_timeout}
-    "4" {detach_after_connect $wait_timeout}
-    "5" {detach_after_handshake $wait_timeout}
-    "6" {shutdown_after_connect $wait_timeout}
-    "7" {shutdown_after_handshake $wait_timeout}
+    "4" {connect_with_fake_jdb direct-disconnect $wait_timeout}
+    "5" {connect_with_fake_jdb wrong-handshake $wait_timeout}
+    "6" {connect_with_fake_jdb wrong-packet $wait_timeout}
+    "7" {shutdown_after_connect $wait_timeout}
+    "8" {shutdown_after_handshake $wait_timeout}
   }
 }
 
@@ -222,7 +213,7 @@ if {[llength $argv] < 2} {
   set javac_path $java_home/bin/javac
   set java_path $java_home/bin/java
   set script_dir [file dirname [info script]]
-  spawn $javac_path -d . $script_dir/InfLoop.java $script_dir/FakeJdb.java
+  spawn $javac_path -g -d . $script_dir/InfLoop.java $script_dir/FakeJdb.java
   expect eof
   wait
   

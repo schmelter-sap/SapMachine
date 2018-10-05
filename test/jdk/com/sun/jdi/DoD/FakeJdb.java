@@ -10,7 +10,8 @@ public class FakeJdb {
         if (args.length != 3) {
             System.out.println("Syntax: FakeJDB server|client <port> <action>");
             System.out.println("The action can be: no-handshake");
-            System.out.println("                   wrong-hand");
+            System.out.println("                   direct-disconnect");
+            System.out.println("                   wrong-handshake");
             System.out.println("                   wrong-packet");
             System.exit(1);
         }
@@ -37,17 +38,23 @@ public class FakeJdb {
             case "no-handshake":
                 break;
 
-            case "wrong-hand":
+            case "direct-disconnect":
+	        s.close();
+                break;
+
+            case "wrong-handshake":
                 os.write(new byte[handshake.length]);
+                s.close();
                 break;
 
             case "wrong-packet":
                 os.write(handshake.length);
                 is.readNBytes(handshake, 0, handshake.length);
                 os.write(new byte[13]);
+                s.close();
         }
 
-        while (s.isConnected()) {
+        while (!s.isClosed() && s.isConnected()) {
             Thread.sleep(100);
         }
     }
