@@ -294,7 +294,6 @@ connectionInitiated(jdwpTransportEnv *t)
     debugMonitorExit(listenerLock);
 
     if (isValid) {
-        onDemand_notifyDebuggingStarted();
         debugLoop_run();
     }
 
@@ -360,6 +359,10 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
     /* System property no longer needed */
     setTransportProperty(jni_env, NULL);
 
+    if (onDemand_isStopping()) {
+        rc = JDWPTRANSPORT_ERROR_TIMEOUT;
+    }
+
     if (rc != JDWPTRANSPORT_ERROR_NONE) {
         /*
          * If accept fails it probably means a timeout, or another fatal error
@@ -387,26 +390,30 @@ static void JNICALL
 attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
 {
     TransportInfo *info = (TransportInfo*)(void*)arg;
+    jdwpTransportEnv *trans = info->transport;
+    jint err = JDWPTRANSPORT_ERROR_TIMEOUT;
 
-    if (onDemand_isEnabled()) {
-        jdwpTransportEnv *trans = info->transport;
-        jint err = JDWPTRANSPORT_ERROR_TIMEOUT;
+    JDI_ASSERT(onDemand_isEnabled());
 
-        if (onDemand_notifyWaitingForConnection()) {
-            err = (*trans)->Attach(trans, info->address, info->timeout, 0);
-        }
-        if (err != JDWPTRANSPORT_ERROR_NONE) {
-            printLastError(trans, err);
-            (*trans)->StopListening(trans);
-            if (!gdata->vmDead) {
-                if (onDemand_isEnabled()) {
-                    transport = info->transport; // We have to save the transport even on error, since we might try again.
-                }
-                debugInit_reset(getEnv());
+    if (onDemand_notifyWaitingForConnection()) {
+        err = (*trans)->Attach(trans, info->address, info->timeout, 0);
+    }
+
+    if (onDemand_isStopping()) {
+        err = JDWPTRANSPORT_ERROR_TIMEOUT;
+    }
+
+    if (err != JDWPTRANSPORT_ERROR_NONE) {
+        printLastError(trans, err);
+        (*trans)->StopListening(trans);
+        if (!gdata->vmDead) {
+            if (onDemand_isEnabled()) {
+                transport = info->transport; // We have to save the transport even on error, since we might try again.
             }
-            jvmtiDeallocate(info);
-            return;
+            debugInit_reset(getEnv());
         }
+        jvmtiDeallocate(info);
+        return;
     }
 
     LOG_MISC(("Begin attach thread"));
@@ -758,7 +765,6 @@ transport_receivePacket(jdwpPacket *packet)
          */
         return (jint)-1;
     }
-    JDI_ASSERT(packet->type.cmd.flags == 0);
     LOG_MISC(("Receiving packet id %d with len %d, cmdSet %d, cmd %d", (int)packet->type.cmd.len, (int)packet->type.cmd.id, (int)packet->type.cmd.cmdSet, (int)packet->type.cmd.cmd));
     return 0;
 }

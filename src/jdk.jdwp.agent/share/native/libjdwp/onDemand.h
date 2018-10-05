@@ -35,9 +35,12 @@ void onDemand_init();
 void onDemand_enable();
 jboolean onDemand_notifyWaitingForConnection();
 void onDemand_notifyDebuggingStarted();
+void onDemand_notifyDebugReaderStopped();
+void onDemand_notifyDebuggingStopped();
 void onDemand_notifyTransportListenFailed();
 jboolean onDemand_waitForNewSession();
 jboolean onDemand_isEnabled();
+jboolean onDemand_isStopping();
 long onDemand_getTimeout();
 
 /* Exteneral API */
@@ -60,13 +63,12 @@ typedef enum {
 typedef enum {
     STOPPING_ERROR_OK,
     STOPPING_ERROR_DISABLED,
-    STOPPING_ERROR_WRONG_STATE,
-    STOPPING_ERROR_TIMED_OUT
+    STOPPING_ERROR_WRONG_STATE
 } onDemandStoppingError;
 
 JNIEXPORT char const* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server, jboolean* has_address_override, char* address, jint address_max_size);
 JNIEXPORT onDemandState onDemand_getState(jboolean* is_server, char* address, jint address_max_size, jlong* session_id);
 JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thread, jint timeout, jboolean is_server, char const* address, jlong* session_id);
-JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jint timeout, jlong session_id);
+JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jlong session_id, jlong* stopped_id);
 
 #endif

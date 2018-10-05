@@ -912,14 +912,15 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
-class DebugOnDemandStopDCmd : public DCmd {
+class DebugOnDemandStopDCmd : public DCmdWithParser {
+  DCmdArgument<jlong> _session_id;
 public:
   DebugOnDemandStopDCmd(outputStream* output, bool heap);
   static const char* name() {
     return "DoD.stop";
   }
   static const char* description() {
-    return "Stops debugging the VM.";
+    return "Stops on-demand-debugging of the VM.";
   }
   static const char* impact() {
     return "Low";
@@ -929,7 +930,7 @@ public:
       "monitor", NULL };
     return p;
   }
-  static int num_arguments() { return 0; }
+  static int num_arguments();
   virtual void execute(DCmdSource source, TRAPS);
 };
 

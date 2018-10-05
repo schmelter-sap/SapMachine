@@ -31,6 +31,7 @@
 #include "inStream.h"
 #include "outStream.h"
 #include "threadControl.h"
+#include "onDemand.h"
 
 static void JNICALL reader(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg);
 static void enqueue(jdwpPacket *p);
@@ -90,6 +91,7 @@ debugLoop_run(void)
     transportError = JNI_FALSE;
 
     shouldListen = JNI_TRUE;
+    onDemand_notifyDebuggingStarted();
 
     func = &reader;
     (void)spawnNewThread(func, NULL, "JDWP Command Reader");
@@ -98,7 +100,7 @@ debugLoop_run(void)
     threadControl_onConnect();
 
     /* Okay, start reading cmds! */
-    while (shouldListen) {
+    while (shouldListen && !onDemand_isStopping()) {
         if (!dequeue(&p)) {
             break;
         }
@@ -186,6 +188,7 @@ debugLoop_run(void)
      * be trying to send.
      */
     transport_close();
+    onDemand_notifyDebuggingStopped();
     debugMonitorDestroy(cmdQueueLock);
 
     /* Reset for a new connection to this VM if it's still alive */
@@ -241,6 +244,7 @@ reader(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
             shouldListen = !lastCommand(cmd);
         }
     }
+    onDemand_notifyDebugReaderStopped();
     LOG_MISC(("End reader thread"));
 }
 

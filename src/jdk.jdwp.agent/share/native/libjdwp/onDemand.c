@@ -33,6 +33,8 @@
 
 static jboolean enabled = JNI_FALSE;
 static jboolean initCalled = JNI_FALSE;
+static jboolean debugLoopRunning = JNI_FALSE;
+static jboolean debugReaderRunning = JNI_FALSE;
 static jrawMonitorID onDemandMonitor;
 static onDemandState onDemandCurrentState = ON_DEMAND_DISABLED;
 static char onDemandTransportName[128];
@@ -143,6 +145,46 @@ void onDemand_notifyDebuggingStarted() {
         LOG_MISC(("Unexpected state %d when starting debugging", onDemandCurrentState));
     } else {
         onDemandCurrentState = ON_DEMAND_CONNECTED;
+        debugLoopRunning = JNI_TRUE;
+        debugReaderRunning = JNI_TRUE;
+        debugMonitorNotifyAll(onDemandMonitor);
+    }
+
+    debugMonitorExit(onDemandMonitor);
+}
+
+void onDemand_notifyDebugReaderStopped() {
+    if (!onDemand_isEnabled()) {
+        return;
+    }
+
+    LOG_MISC(("Notifying debugging reader stopped."));
+
+    debugMonitorEnter(onDemandMonitor);
+    JDI_ASSERT(debugReaderRunning);
+    debugReaderRunning = JNI_FALSE;
+    debugMonitorNotifyAll(onDemandMonitor);
+    debugMonitorExit(onDemandMonitor);
+}
+
+void onDemand_notifyDebuggingStopped() {
+    if (!onDemand_isEnabled()) {
+        return;
+    }
+
+    LOG_MISC(("Notifying debugging session stopped."));
+
+    debugMonitorEnter(onDemandMonitor);
+
+    while (debugReaderRunning) {
+        debugMonitorWait(onDemandMonitor);
+    }
+
+    if ((onDemandCurrentState != ON_DEMAND_CONNECTED) && (onDemandCurrentState != ON_DEMAND_STOPPING)) {
+        LOG_MISC(("Unexpected state %d when debugging stopped", onDemandCurrentState));
+    } else {
+        onDemandCurrentState = ON_DEMAND_STOPPING;
+        debugLoopRunning = JNI_FALSE;
         debugMonitorNotifyAll(onDemandMonitor);
     }
 
@@ -165,10 +207,10 @@ void onDemand_notifyTransportListenFailed() {
 }
 
 jboolean onDemand_waitForNewSession() {
-    JDI_ASSERT(onDemand_isEnabled());
-
-    LOG_MISC(("Waiting for new debugging session ..."));
     jboolean result = JNI_TRUE;
+
+    JDI_ASSERT(onDemand_isEnabled());
+    LOG_MISC(("Waiting for new debugging session ..."));
 
     debugMonitorEnter(onDemandMonitor);
 
@@ -202,6 +244,20 @@ jboolean onDemand_waitForNewSession() {
 
 jboolean onDemand_isEnabled() {
     return enabled;
+}
+
+jboolean onDemand_isStopping() {
+    jboolean result;
+
+    if (!enabled) {
+        return JNI_FALSE;
+    }
+
+    debugMonitorEnter(onDemandMonitor);
+    result = onDemandCurrentState == ON_DEMAND_STOPPING ? JNI_TRUE : JNI_FALSE;
+    debugMonitorExit(onDemandMonitor);
+
+    return result;
 }
 
 JNIEXPORT char const* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server, jboolean* has_address_override, char* address, jint address_max_size) {
@@ -304,35 +360,37 @@ JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thr
     return result;
 }
 
-JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jint timeout, jlong session_id) {
+JNIEXPORT onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jlong session_id, jlong* stopped_id) {
     onDemandStoppingError result;
-
-    debugMonitorEnter(onDemandMonitor);
 
     if (!enabled) {
         return STOPPING_ERROR_DISABLED;
     }
 
-    LOG_MISC(("Stopping DoD with timeout %lld sec with session id %lld", (long long) timeout, (long long) session_id));
+    LOG_MISC(("Stopping DoD with session id %lld", (long long) session_id));
+
+    debugMonitorEnter(onDemandMonitor);
+
+    if (session_id == -1) {
+        session_id = onDemandSessionId;
+    }
+
+    *stopped_id = session_id;
 
     if (session_id != onDemandSessionId) {
         /* A new session is already there, so stopping worked! */
         result = STOPPING_ERROR_OK;
-    } else if ((onDemandCurrentState != ON_DEMAND_CONNECTED) && (onDemandCurrentState != ON_DEMAND_STOPPING)) {
+    } else if ((onDemandCurrentState == ON_DEMAND_INITIAL) || (onDemandCurrentState == ON_DEMAND_INACTIVE)) {
         result = STOPPING_ERROR_WRONG_STATE;
     } else {
-        onDemandTimeout = 1000* (long) timeout;
         onDemandCurrentState = ON_DEMAND_STOPPING;
-        debugLoop_stop();
+
+        if (debugLoopRunning) {
+            debugLoop_stop();
+        }
 
         debugMonitorNotifyAll(onDemandMonitor);
-        debugMonitorTimedWait(onDemandMonitor, timeout);
-		
-        if ((session_id == onDemandSessionId) && (onDemandCurrentState == ON_DEMAND_STOPPING)) {
-            result = STOPPING_ERROR_TIMED_OUT;
-        } else {
-            result = STOPPING_ERROR_OK;
-        }
+        result = STOPPING_ERROR_OK;
     }
 
     debugMonitorExit(onDemandMonitor);
