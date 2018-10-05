@@ -390,30 +390,31 @@ static void JNICALL
 attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
 {
     TransportInfo *info = (TransportInfo*)(void*)arg;
-    jdwpTransportEnv *trans = info->transport;
-    jint err = JDWPTRANSPORT_ERROR_TIMEOUT;
 
-    JDI_ASSERT(onDemand_isEnabled());
+    if (onDemand_isEnabled()) {
+        jdwpTransportEnv *trans = info->transport;
+        jint err = JDWPTRANSPORT_ERROR_TIMEOUT;
 
-    if (onDemand_notifyWaitingForConnection()) {
-        err = (*trans)->Attach(trans, info->address, info->timeout, 0);
-    }
-
-    if (onDemand_isStopping()) {
-        err = JDWPTRANSPORT_ERROR_TIMEOUT;
-    }
-
-    if (err != JDWPTRANSPORT_ERROR_NONE) {
-        printLastError(trans, err);
-        (*trans)->StopListening(trans);
-        if (!gdata->vmDead) {
-            if (onDemand_isEnabled()) {
-                transport = info->transport; // We have to save the transport even on error, since we might try again.
-            }
-            debugInit_reset(getEnv());
+        if (onDemand_notifyWaitingForConnection()) {
+            err = (*trans)->Attach(trans, info->address, info->timeout, 0);
         }
-        jvmtiDeallocate(info);
-        return;
+
+        if (onDemand_isStopping()) {
+            err = JDWPTRANSPORT_ERROR_TIMEOUT;
+        }
+
+        if (err != JDWPTRANSPORT_ERROR_NONE) {
+            printLastError(trans, err);
+            (*trans)->StopListening(trans);
+            if (!gdata->vmDead) {
+                if (onDemand_isEnabled()) {
+                    transport = info->transport; // We have to save the transport even on error, since we might try again.
+                }
+                debugInit_reset(getEnv());
+            }
+            jvmtiDeallocate(info);
+            return;
+        }
     }
 
     LOG_MISC(("Begin attach thread"));
