@@ -347,13 +347,15 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
     TransportInfo *info;
     jdwpTransportEnv *t;
     jdwpTransportError rc = JDWPTRANSPORT_ERROR_TIMEOUT;
+    jlong timeout_left;
 
     LOG_MISC(("Begin accept thread"));
 
     info = (TransportInfo*)(void*)arg;
+    timeout_left = info->timeout;
     t = info->transport;
-    if (onDemand_notifyWaitingForConnection()) {
-        rc = (*t)->Accept(t, info->timeout, 0);
+    while ((rc == JDWPTRANSPORT_ERROR_TIMEOUT) && onDemand_notifyWaitingForConnection(info->timeout, &timeout_left)) {
+        rc = (*t)->Accept(t, onDemand_getTimeoutForConnect(info->timeout), 0);
     }
 
     /* System property no longer needed */
@@ -394,9 +396,10 @@ attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
     if (onDemand_isEnabled()) {
         jdwpTransportEnv *trans = info->transport;
         jint err = JDWPTRANSPORT_ERROR_TIMEOUT;
+        jlong timeout_left = info->timeout;
 
-        if (onDemand_notifyWaitingForConnection()) {
-            err = (*trans)->Attach(trans, info->address, info->timeout, 0);
+        while ((err == JDWPTRANSPORT_ERROR_TIMEOUT) && onDemand_notifyWaitingForConnection(info->timeout, &timeout_left)) {
+            err = (*trans)->Attach(trans, info->address, onDemand_getTimeoutForConnect(info->timeout), 0);
         }
 
         if (onDemand_isStopping()) {

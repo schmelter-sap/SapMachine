@@ -31,6 +31,7 @@
 
 #define ON_DEMAND_KEY "ondemand"
 
+static jlong real_timeout = 1000;
 static jboolean enabled = JNI_FALSE;
 static jboolean initCalled = JNI_FALSE;
 static jboolean debugLoopRunning = JNI_FALSE;
@@ -107,29 +108,45 @@ void onDemand_enable() {
     LOG_MISC(("Debugging on demand enabled"));
 }
 
-jboolean onDemand_notifyWaitingForConnection() {
-    jboolean result = JNI_FALSE;
+jboolean onDemand_notifyWaitingForConnection(jlong initial_timeout, jlong* timeout_left) {
+    jboolean result = JNI_TRUE;
+    jboolean is_initial = initial_timeout == *timeout_left ? JNI_TRUE : JNI_FALSE;
+    *timeout_left -= real_timeout;
 
     if (!onDemand_isEnabled()) {
-        return JNI_TRUE; // True means not to skip the connection.
+        return is_initial;
     }
 
     LOG_MISC(("Notifying debugging connection is (about to be) set up."));
 
     debugMonitorEnter(onDemandMonitor);
 
-    if (onDemandCurrentState != ON_DEMAND_STARTING) {
-        LOG_MISC(("Unexpected state %d when waiting for connection", onDemandCurrentState));
+    if (onDemandCurrentState == ON_DEMAND_STOPPING) {
+        result = JNI_FALSE;
+    } else if (is_initial) {
+        if (onDemandCurrentState != ON_DEMAND_STARTING) {
+            LOG_MISC(("Unexpected state %d when waiting for connection", onDemandCurrentState));
+            result = JNI_FALSE;
+        } else {
+            onDemandCurrentState = ON_DEMAND_WAITING_FOR_CONNECTION;
+            debugMonitorNotifyAll(onDemandMonitor);
+        }
     }
-    else {
-        onDemandCurrentState = ON_DEMAND_WAITING_FOR_CONNECTION;
-        debugMonitorNotifyAll(onDemandMonitor);
-        result = JNI_TRUE;
+
+    // Timeout < 0 means no timeout, so wait forever.
+    if (initial_timeout <= 0) {
+        *timeout_left = initial_timeout - 1;
+    } else if (*timeout_left <= 0) {
+        result = JNI_FALSE; // The real timeout was hit.
     }
 
     debugMonitorExit(onDemandMonitor);
 
     return result;
+}
+
+jlong onDemand_getTimeoutForConnect(jlong initial_timeout) {
+    return onDemand_isEnabled() ? real_timeout : initial_timeout;
 }
 
 void onDemand_notifyDebuggingStarted() {

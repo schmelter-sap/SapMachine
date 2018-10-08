@@ -154,7 +154,7 @@ proc connect_with_fake_jdb {command wait_timeout} {
 
   start_debugging localhost:0 true 10 $wait_timeout
   set port [get_listen_port_from_debuggee $wait_timeout]
-  spawn $java_path -cp . FakeJdb client $port $command
+  spawn $java_path -cp . FakeJdb client $port no-handshake
   expect eof
   wait
   wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
@@ -170,6 +170,35 @@ proc attach_to_fake_jdb {command wait_timeout} {
   }
   set fake_id $spawn_id
   start_debugging localhost:$port false 10 $wait_timeout
+  expect -i $fake_id eof
+  wait -i $fake_id
+  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
+}
+
+proc stop_in_connect {wait_timeout} {
+  global java_path
+
+  start_debugging localhost:0 true 10 $wait_timeout
+  set start_time [clock milliseconds]
+  stop_debugging_via_jcmd
+  set elapsed [expr [clock milliseconds] - $start_time]
+  if {$elapsed > [expr 1000 * $wait_timeout]} {
+    fail "Timeout was hit ($elapsed)"
+  }
+  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
+}
+
+proc stop_in_attach {command wait_timeout} {
+  global java_path
+
+  spawn $java_path -cp . FakeJdb server 0 no-handshake
+  expect {
+    -re {Using port ([0-9]*)} {set port $expect_out(1,string)}
+    eof {fail "Missing output from fake jdb"}
+  }
+  set fake_id $spawn_id
+  start_debugging localhost:$port false 10 $wait_timeout
+  stop_debugging_via_jcmd
   expect -i $fake_id eof
   wait -i $fake_id
   wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
@@ -191,40 +220,26 @@ proc execute_test {test_id wait_timeout} {
     "7" {attach_to_fake_jdb direct-disconnect $wait_timeout}
     "8" {attach_to_fake_jdb wrong-handshake $wait_timeout}
     "9" {attach_to_fake_jdb wrong-packet $wait_timeout}
+   "10" {stop_in_connect $wait_timeout}
+   "11" {stop_in_attach $wait_timeout}
   }
 }
 
-if {[llength $argv] < 2} {
-  puts "Syntax: test.expect <jdk-home> loop (starts the InfLoop Java program)"
-  puts "        test.expect <jdk-home> <0-7|all> (runs tests against the loop)"
-} else {
-  set prog_id "InfLoop"
-  set java_home [lindex $argv 0]
-  set jcmd_path $java_home/bin/jcmd
-  set jdb_path $java_home/bin/jdb
-  set javac_path $java_home/bin/javac
-  set java_path $java_home/bin/java
-  set script_dir [file dirname [info script]]
-  spawn $javac_path -g -d . $script_dir/InfLoop.java $script_dir/FakeJdb.java
-  expect eof
-  wait
-  
-  if {[lindex $argv 1] == "loop"} {
-    spawn $java_path -agentlib:jdwp=transport=dt_socket,ondemand=y -cp . InfLoop
-    expect eof
-    wait
-  } else {
-    set run 0
+set java_home [lindex $argv 0]
+set jcmd_path $java_home/bin/jcmd
+set jdb_path $java_home/bin/jdb
+set java_path $java_home/bin/java
+set script_dir [file dirname [info script]]
+set prog_id [lindex $argv 1]
+set run 0
 
-    while {1} {
-      if {[lindex $argv 1] == "all"} {
-        execute_test [expr int(rand() * 10)] 10
-      } else {
-        execute_test [lindex $argv 1] 10
-      }
-  
-      set run [expr $run + 1]
-      puts "\n***** Finished run $run ******\n"
-    }
+while {1} {
+  if {[lindex $argv 2] == "all"} {
+    execute_test [expr int(rand() * 11)] 10
+  } else {
+    execute_test [lindex $argv 2] 10
   }
+
+  set run [expr $run + 1]
+  puts "\n***** Finished run $run ******\n"
 }
