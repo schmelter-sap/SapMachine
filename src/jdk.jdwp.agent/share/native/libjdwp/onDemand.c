@@ -149,6 +149,10 @@ jlong onDemand_getTimeoutForConnect(jlong initial_timeout) {
     return onDemand_isEnabled() ? real_timeout : initial_timeout;
 }
 
+jlong onDemand_getHandshakeTimeout() {
+    return onDemand_isEnabled() ? 3000 : 0;
+}
+
 void onDemand_notifyDebuggingStarted() {
     if (!onDemand_isEnabled()) {
         return;

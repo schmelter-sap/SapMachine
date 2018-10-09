@@ -35,6 +35,7 @@ void onDemand_init();
 void onDemand_enable();
 jboolean onDemand_notifyWaitingForConnection(jlong initial_timeout, jlong* timeout_left);
 jlong onDemand_getTimeoutForConnect(jlong initial_timeout);
+jlong onDemand_getHandshakeTimeout();
 void onDemand_notifyDebuggingStarted();
 void onDemand_notifyDebugReaderStopped();
 void onDemand_notifyDebuggingStopped();

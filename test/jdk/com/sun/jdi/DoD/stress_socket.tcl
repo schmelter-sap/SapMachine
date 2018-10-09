@@ -154,7 +154,7 @@ proc connect_with_fake_jdb {command wait_timeout} {
 
   start_debugging localhost:0 true 10 $wait_timeout
   set port [get_listen_port_from_debuggee $wait_timeout]
-  spawn $java_path -cp . FakeJdb client $port no-handshake
+  spawn $java_path -cp . FakeJdb client $port $command
   expect eof
   wait
   wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
@@ -179,19 +179,14 @@ proc stop_in_connect {wait_timeout} {
   global java_path
 
   start_debugging localhost:0 true 10 $wait_timeout
-  set start_time [clock milliseconds]
   stop_debugging_via_jcmd
-  set elapsed [expr [clock milliseconds] - $start_time]
-  if {$elapsed > [expr 1000 * $wait_timeout]} {
-    fail "Timeout was hit ($elapsed)"
-  }
   wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
 }
 
-proc stop_in_attach {command wait_timeout} {
+proc stop_in_attach {wait_timeout} {
   global java_path
 
-  spawn $java_path -cp . FakeJdb server 0 no-handshake
+  spawn $java_path -cp . FakeJdb server 0 no-accept [expr 1000 * ($wait_timeout + 5)]
   expect {
     -re {Using port ([0-9]*)} {set port $expect_out(1,string)}
     eof {fail "Missing output from fake jdb"}
@@ -199,9 +194,9 @@ proc stop_in_attach {command wait_timeout} {
   set fake_id $spawn_id
   start_debugging localhost:$port false 10 $wait_timeout
   stop_debugging_via_jcmd
+  wait_for_debugging_to_be_inactive [expr $wait_timeout]
   expect -i $fake_id eof
   wait -i $fake_id
-  wait_for_debugging_to_be_inactive [expr $wait_timeout + 2]
 }
 
 proc execute_test {test_id wait_timeout} {
@@ -226,14 +221,13 @@ proc execute_test {test_id wait_timeout} {
 }
 
 set java_home [lindex $argv 0]
-set jcmd_path $java_home/bin/jcmd
-set jdb_path $java_home/bin/jdb
-set java_path $java_home/bin/java
-set script_dir [file dirname [info script]]
 set prog_id [lindex $argv 1]
+set script_dir [file dirname [info script]]
+source $script_dir/common.tcl
 set run 0
+set max_run [lindex $argv 3]
 
-while {1} {
+while {$run < $max_run} {
   if {[lindex $argv 2] == "all"} {
     execute_test [expr int(rand() * 11)] 10
   } else {

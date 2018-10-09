@@ -9,10 +9,10 @@ fi
 WD=$(pwd)
 cd "$1"
 JH=$(PWD)
-cd -
+cd "$WD"
 cd $(dirname "$0")
 "$JH"/bin/javac -g -d . InfLoop.java FakeJdb.java
 mv -f *.class "$WD"/
-cd -
+cd "$WD"
 
 "$JH"/bin/java -agentlib:jdwp=transport=dt_socket,ondemand=y -cp . InfLoop

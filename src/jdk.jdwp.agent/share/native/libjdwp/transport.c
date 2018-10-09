@@ -355,7 +355,7 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
     timeout_left = info->timeout;
     t = info->transport;
     while ((rc == JDWPTRANSPORT_ERROR_TIMEOUT) && onDemand_notifyWaitingForConnection(info->timeout, &timeout_left)) {
-        rc = (*t)->Accept(t, onDemand_getTimeoutForConnect(info->timeout), 0);
+        rc = (*t)->Accept(t, onDemand_getTimeoutForConnect(info->timeout), onDemand_getHandshakeTimeout());
     }
 
     /* System property no longer needed */
@@ -399,7 +399,7 @@ attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
         jlong timeout_left = info->timeout;
 
         while ((err == JDWPTRANSPORT_ERROR_TIMEOUT) && onDemand_notifyWaitingForConnection(info->timeout, &timeout_left)) {
-            err = (*trans)->Attach(trans, info->address, onDemand_getTimeoutForConnect(info->timeout), 0);
+            err = (*trans)->Attach(trans, info->address, onDemand_getTimeoutForConnect(info->timeout), onDemand_getHandshakeTimeout());
         }
 
         if (onDemand_isStopping()) {

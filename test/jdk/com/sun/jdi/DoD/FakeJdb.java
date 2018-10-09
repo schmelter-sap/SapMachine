@@ -7,12 +7,13 @@ import java.nio.charset.StandardCharsets;
 public class FakeJdb {
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 3) {
+        if (args.length < 3) {
             System.out.println("Syntax: FakeJDB server|client <port> <action>");
             System.out.println("The action can be: no-handshake");
             System.out.println("                   direct-disconnect");
             System.out.println("                   wrong-handshake");
             System.out.println("                   wrong-packet");
+            System.out.println("                   no-accept <timeout> (server-only)");
             System.exit(1);
         }
 
@@ -25,6 +26,10 @@ public class FakeJdb {
             ServerSocket ss = new ServerSocket(port);
             System.out.println("Using port " +
                     ss.getLocalPort());
+            if ("no-accept".equals(args[2])) {
+                Thread.sleep(Integer.parseInt(args[3]));
+                System.exit(0);
+            }
             s = ss.accept();
             ss.close();
         } else {

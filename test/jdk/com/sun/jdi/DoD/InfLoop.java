@@ -4,7 +4,8 @@ public class InfLoop {
         long l = 0;
 
         while (true) {
-            System.out.println(l + "...");
+            System.out.println(l + " iterations (pid " +
+                    ProcessHandle.current().pid() + ")");
             Thread.sleep(1000);
             l += 1;
         }
