@@ -8,7 +8,7 @@ fi
 
 WD=$(pwd)
 cd "$1"
-JH=$(PWD)
+JH=$(pwd)
 cd "$WD"
 cd $(dirname "$0")
 "$JH"/bin/javac -g -d . InfLoop.java FakeJdb.java
