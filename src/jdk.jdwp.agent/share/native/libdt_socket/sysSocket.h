@@ -39,6 +39,7 @@ typedef int socklen_t;
 #endif
 
 int dbgsysSocketClose(int fd);
+int dbgsysSocketShutdown(int fd, jboolean send, jboolean recv);
 int dbgsysConnect(int fd, struct sockaddr *him, socklen_t len);
 int dbgsysFinishConnect(int fd, int timeout);
 int dbgsysAccept(int fd, struct sockaddr *him, socklen_t *len);

@@ -48,7 +48,7 @@
  */
 
 static int serverSocketFD;
-static int socketFD = -1;
+static volatile int socketFD = -1;
 static jdwpTransportCallback *callback;
 static JavaVM *jvm;
 static int tlsIndex;
@@ -607,6 +607,11 @@ socketTransport_accept(jdwpTransportEnv* env, jlong acceptTimeout, jlong handsha
          */
         memset((void *)&socket,0,sizeof(struct sockaddr_in));
         socketLen = sizeof(socket);
+        if (socketFD >= 0) {
+            int fd = socketFD;
+            socketFD = -1;
+            dbgsysSocketClose(fd);
+        }
         socketFD = dbgsysAccept(serverSocketFD,
                                 (struct sockaddr *)&socket,
                                 &socketLen);
@@ -702,6 +707,11 @@ socketTransport_attach(jdwpTransportEnv* env, const char* addressString, jlong a
         return err;
     }
 
+    if (socketFD >= 0) {
+        int fd = socketFD;
+        socketFD = -1;
+        dbgsysSocketClose(fd);
+    }
     socketFD = dbgsysSocket(AF_INET, SOCK_STREAM, 0);
     if (socketFD < 0) {
         RETURN_IO_ERROR("unable to create socket");
@@ -767,31 +777,14 @@ socketTransport_isOpen(jdwpTransportEnv* env)
 static jdwpTransportError JNICALL
 socketTransport_close(jdwpTransportEnv* env)
 {
-    int fd = socketFD;
-    socketFD = -1;
-    if (fd < 0) {
-        return JDWPTRANSPORT_ERROR_NONE;
+    /* Don't close the fd here directly, since it can then be reused and another JDWP thread might still use it.
+     * We just delay the real close until a new connection is requested. But we make sure, the connection is shut down, so
+     * we get out of the send/recv calls.
+     */
+    if (socketFD >= 0) {
+        dbgsysSocketShutdown(socketFD, JNI_TRUE, JNI_TRUE);
     }
-#ifdef _AIX
-    /*
-      AIX needs a workaround for I/O cancellation, see:
-      http://publib.boulder.ibm.com/infocenter/pseries/v5r3/index.jsp?topic=/com.ibm.aix.basetechref/doc/basetrf1/close.htm
-      ...
-      The close subroutine is blocked until all subroutines which use the file
-      descriptor return to usr space. For example, when a thread is calling close
-      and another thread is calling select with the same file descriptor, the
-      close subroutine does not return until the select call returns.
-      ...
-    */
-    shutdown(fd, 2);
-#endif
-    if (dbgsysSocketClose(fd) < 0) {
-        /*
-         * close failed - it's pointless to restore socketFD here because
-         * any subsequent close will likely fail as well.
-         */
-        RETURN_IO_ERROR("close failed");
-    }
+
     return JDWPTRANSPORT_ERROR_NONE;
 }
 
