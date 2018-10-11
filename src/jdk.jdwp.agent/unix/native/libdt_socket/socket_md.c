@@ -161,7 +161,7 @@ int dbgsysSocketClose(int fd) {
 int
 dbgsysSocketShutdown(int fd, jboolean send, jboolean recv) {
     if (send || recv) {
-        return shutdown(fd, send ? (recv ? SHUT_RDWR : SHUT_WR) : SD_RD);
+        return shutdown(fd, send ? (recv ? SHUT_RDWR : SHUT_WR) : SHUT_RD);
     }
 
     return -1;
