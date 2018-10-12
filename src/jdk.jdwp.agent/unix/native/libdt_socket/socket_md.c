@@ -159,7 +159,7 @@ int dbgsysSocketClose(int fd) {
 }
 
 int
-dbgsysSocketShutdownFulldbgsysSocketShutdownFull(int fd) {
+dbgsysSocketShutdownFull(int fd) {
     return shutdown(fd, SHUT_RDWR);
 }
 
