@@ -48,7 +48,7 @@
  */
 
 static int serverSocketFD;
-static volatile int socketFD = -1;
+static int socketFD = -1;
 static jdwpTransportCallback *callback;
 static JavaVM *jvm;
 static int tlsIndex;
@@ -608,9 +608,7 @@ socketTransport_accept(jdwpTransportEnv* env, jlong acceptTimeout, jlong handsha
         memset((void *)&socket,0,sizeof(struct sockaddr_in));
         socketLen = sizeof(socket);
         if (socketFD >= 0) {
-            int fd = socketFD;
-            socketFD = -1;
-            dbgsysSocketClose(fd);
+            dbgsysSocketClose(socketFD);
         }
         socketFD = dbgsysAccept(serverSocketFD,
                                 (struct sockaddr *)&socket,
@@ -708,9 +706,7 @@ socketTransport_attach(jdwpTransportEnv* env, const char* addressString, jlong a
     }
 
     if (socketFD >= 0) {
-        int fd = socketFD;
-        socketFD = -1;
-        dbgsysSocketClose(fd);
+        dbgsysSocketClose(socketFD);
     }
     socketFD = dbgsysSocket(AF_INET, SOCK_STREAM, 0);
     if (socketFD < 0) {
@@ -782,7 +778,7 @@ socketTransport_close(jdwpTransportEnv* env)
      * we get out of the send/recv calls.
      */
     if (socketFD >= 0) {
-        dbgsysSocketShutdown(socketFD, JNI_TRUE, JNI_TRUE);
+        dbgsysSocketShutdownFull(socketFD);
     }
 
     return JDWPTRANSPORT_ERROR_NONE;

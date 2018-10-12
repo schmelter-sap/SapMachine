@@ -233,12 +233,8 @@ dbgsysSocketClose(int fd) {
 }
 
 int 
-dbgsysSocketShutdown(int fd, jboolean send, jboolean recv) {
-    if (send || recv) {
-        return shutdown(fd, send ? (recv ? SD_BOTH : SD_SEND) : SD_RECEIVE);
-    }
-
-    return -1;
+dbgsysSocketShutdownFull(int fd) {
+    return shutdown(fd, SD_BOTH);
 }
 
 /* Additions to original follow */
