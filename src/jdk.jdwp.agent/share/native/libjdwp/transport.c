@@ -365,6 +365,10 @@ acceptThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
         rc = JDWPTRANSPORT_ERROR_TIMEOUT;
     }
 
+    if (rc == JDWPTRANSPORT_ERROR_NONE && !onDemand_notifyConnectEstablished()) {
+        rc = JDWPTRANSPORT_ERROR_TIMEOUT;
+    }
+
     if (rc != JDWPTRANSPORT_ERROR_NONE) {
         /*
          * If accept fails it probably means a timeout, or another fatal error
@@ -403,6 +407,10 @@ attachThread(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* arg)
         }
 
         if (onDemand_isStopping()) {
+            err = JDWPTRANSPORT_ERROR_TIMEOUT;
+        }
+
+        if (err == JDWPTRANSPORT_ERROR_NONE && !onDemand_notifyConnectEstablished()) {
             err = JDWPTRANSPORT_ERROR_TIMEOUT;
         }
 

@@ -891,6 +891,7 @@ public:
 class DebugOnDemandStartDCmd : public DCmdWithParser {
   DCmdArgument<char*> _address;
   DCmdArgument<bool> _is_server;
+  DCmdArgument<bool> _only_handshake;
   DCmdArgument<jlong> _timeout;
 public:
   DebugOnDemandStartDCmd(outputStream* output, bool heap);
@@ -904,8 +905,28 @@ public:
     return "High: Switches the VM into debug mode.";
   }
   static const JavaPermission permission() {
-    JavaPermission p = { "java.lang.management.ManagementPermission",
-      "monitor", NULL };
+    JavaPermission p = { "java.lang.management.ManagementPermission", "monitor", NULL };
+    return p;
+  }
+  static int num_arguments();
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
+class DebugOnDemandAllowDCmd : public DCmdWithParser {
+  DCmdArgument<jlong> _session_id;
+public:
+  DebugOnDemandAllowDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "DoD.allow";
+  }
+  static const char* description() {
+    return "Allows the connected VM to start debugging.";
+  }
+  static const char* impact() {
+    return "High: Switches the VM into debug mode.";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = { "java.lang.management.ManagementPermission", "monitor", NULL };
     return p;
   }
   static int num_arguments();
@@ -926,8 +947,7 @@ public:
     return "Low";
   }
   static const JavaPermission permission() {
-    JavaPermission p = { "java.lang.management.ManagementPermission",
-      "monitor", NULL };
+    JavaPermission p = { "java.lang.management.ManagementPermission", "monitor", NULL };
     return p;
   }
   static int num_arguments();

@@ -40,6 +40,7 @@ static jrawMonitorID onDemandMonitor;
 static onDemandState onDemandCurrentState = ON_DEMAND_DISABLED;
 static char onDemandTransportName[128];
 static jboolean onDemandIsServer = JNI_FALSE;
+static jboolean onDemandHandshakeOnly = JNI_FALSE;
 static char onDemandAddress[1024];
 static jboolean hasServerOverride = JNI_FALSE;
 static jboolean onDemandIsServerOverride = JNI_FALSE;
@@ -239,7 +240,7 @@ jboolean onDemand_waitForNewSession() {
         // We don't have to wait, since debugging was just started for us.
         onDemandCurrentState = ON_DEMAND_STARTING;
     } else if ((onDemandCurrentState == ON_DEMAND_STOPPING) || (onDemandCurrentState == ON_DEMAND_CONNECTED) ||
-        (onDemandCurrentState == ON_DEMAND_WAITING_FOR_CONNECTION)) {
+        (onDemandCurrentState == ON_DEMAND_WAITING_FOR_CONNECTION) || (onDemandCurrentState == ON_DEMAND_WATING_AFTER_HANDSHAKE)) {
         onDemandCurrentState = ON_DEMAND_INACTIVE;
 
         while (!gdata->vmDead && (onDemandCurrentState == ON_DEMAND_INACTIVE)) {
@@ -281,6 +282,37 @@ jboolean onDemand_isStopping() {
     return result;
 }
 
+jboolean onDemand_notifyConnectEstablished() {
+    jboolean result = JNI_TRUE;
+    jlong timeout_left;
+
+    if (!enabled) {
+        return JNI_TRUE;
+    }
+
+    debugMonitorEnter(onDemandMonitor);
+    timeout_left = onDemandTimeout;
+
+    while (onDemandHandshakeOnly) {
+        if (onDemandCurrentState == ON_DEMAND_STOPPING) {
+            result = JNI_FALSE;
+        } else {
+            onDemandCurrentState = ON_DEMAND_WATING_AFTER_HANDSHAKE;
+            debugMonitorTimedWait(onDemandMonitor, 1000);
+            timeout_left -= 1000;
+
+            if (onDemandHandshakeOnly && (onDemandTimeout > 0) && (timeout_left <= 0)) {
+                onDemandHandshakeOnly = JNI_FALSE;
+                result = JNI_FALSE;
+            }
+        }
+    }
+
+    onDemandCurrentState = ON_DEMAND_WAITING_FOR_CONNECTION;
+    debugMonitorExit(onDemandMonitor);
+
+    return result;
+}
 JNIEXPORT char const* onDemand_getConfig(jboolean* has_is_server_override, jboolean* is_server, jboolean* has_address_override, char* address, jint address_max_size) {
     LOG_MISC(("Getting config for DoD"));
     debugMonitorEnter(onDemandMonitor);
@@ -344,14 +376,16 @@ static void JNICALL call_initialize(jvmtiEnv* jvmti_env, JNIEnv* jni_env, void* 
 
 }
 
-JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thread, jint timeout, jboolean is_server, char const* address, jlong* session_id) {
+JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thread, jint timeout, jboolean is_server,
+                                                        jboolean only_handshake, char const* address, jlong* session_id) {
     onDemandStartingError result;
 
     if (!enabled) {
       return STARTING_ERROR_DISABLED;
     }
 
-    LOG_MISC(("Starting DoD with timeout %lld sec, server %s at %s", (long long) timeout, is_server ? "y" : "n", address));
+    LOG_MISC(("Starting DoD with timeout %lld sec, server %s%s at %s", (long long) timeout, is_server ? "y" : "n",
+              only_handshake ? " (handshake only)" : "", address));
 
     debugMonitorEnter(onDemandMonitor);
 
@@ -359,6 +393,7 @@ JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thr
         jlong newSessionId = onDemandSessionId + 1;
         onDemandTimeout = 1000 * (long) timeout;
         onDemandIsServer = is_server;
+        onDemandHandshakeOnly = only_handshake;
         snprintf(onDemandAddress, sizeof(onDemandAddress), "%s", address);
         onDemandAddress[sizeof(onDemandAddress) - 1] = '\0';
         onDemandSessionId = newSessionId;
@@ -374,6 +409,32 @@ JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thr
         }
     } else {
         result = STARTING_ERROR_WRONG_STATE;
+    }
+
+    debugMonitorExit(onDemandMonitor);
+
+    return result;
+}
+
+JNIEXPORT onDemandallowDebuggingError onDemand_allowDebugging(JNIEnv* env, jthread thread, jlong session_id) {
+    onDemandStoppingError result;
+
+    if (!enabled) {
+        return ALLOW_DEBUGGING_ERROR_DISABLED;
+    }
+
+    LOG_MISC(("Allow DoD with session id %lld", (long long) session_id));
+
+    debugMonitorEnter(onDemandMonitor);
+
+    if (session_id != onDemandSessionId) {
+        result = ALLOW_DEBUGGING_ERROR_WRONG_SESSION_ID;
+    } else if (onDemandCurrentState != ON_DEMAND_WATING_AFTER_HANDSHAKE) {
+        result = ALLOW_DEBUGGING_ERROR_WRONG_STATE;
+    } else {
+        onDemandHandshakeOnly = JNI_FALSE;
+        debugMonitorNotifyAll(onDemandMonitor);
+        result = ALLOW_DEBUGGING_ERROR_OK;
     }
 
     debugMonitorExit(onDemandMonitor);

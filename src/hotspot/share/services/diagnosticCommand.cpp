@@ -128,6 +128,7 @@ void DCmdRegistrant::register_dcmds(){
 #if INCLUDE_JVMTI
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandInfoDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStartDCmd>(full_export, true, false));
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandAllowDCmd>(full_export, true, false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStopDCmd>(full_export, true, false));
 #endif
 }
@@ -1072,6 +1073,7 @@ typedef enum {
   ON_DEMAND_INACTIVE,
   ON_DEMAND_STARTING,
   ON_DEMAND_WAITING_FOR_CONNECTION,
+  ON_DEMAND_WATING_AFTER_HANDSHAKE,
   ON_DEMAND_CONNECTED,
   ON_DEMAND_STOPPING
 } onDemandState;
@@ -1083,12 +1085,19 @@ typedef enum {
 } onDemandStartingError;
 
 typedef enum {
+  ALLOW_DEBUGGING_ERROR_OK,
+  ALLOW_DEBUGGING_ERROR_DISABLED,
+  ALLOW_DEBUGGING_ERROR_WRONG_STATE,
+  ALLOW_DEBUGGING_ERROR_WRONG_SESSION_ID
+} onDemandAllowDebuggingError;
+
+typedef enum {
   STOPPING_ERROR_OK,
   STOPPING_ERROR_DISABLED,
   STOPPING_ERROR_WRONG_STATE
 } onDemandStoppingError;
 
-static char const* onDemand_symbols[] = { "onDemand_getConfig", "onDemand_getState", "onDemand_startDebugging", "onDemand_stopDebugging" };
+static char const* onDemand_symbols[] = { "onDemand_getConfig", "onDemand_getState", "onDemand_startDebugging", "onDemand_allowDebugging", "onDemand_stopDebugging" };
 static void* onDemand_functions[sizeof(onDemand_symbols) / sizeof(char const*)] = { NULL, };
 
 extern "C" typedef char const* (JNICALL *onDemand_getConfigPtr)(jboolean* has_is_server_override, jboolean* is_server,
@@ -1097,8 +1106,9 @@ extern "C" typedef char const* (JNICALL *onDemand_getConfigPtr)(jboolean* has_is
 extern "C" typedef onDemandState (JNICALL *onDemand_getStatePtr)(jboolean* is_server, char* address,
                                                         jint address_max_size, jlong* session_id);
 extern "C" typedef onDemandStartingError (JNICALL *onDemand_startDebuggingPtr)(JNIEnv* env, jthread thread, jlong timeout, jboolean is_server,
-                                                                      char const* address, jlong* session_id);
-extern "C" typedef onDemandStoppingError (JNICALL *onDemand_stopDebuggingPtr)(JNIEnv* env, jthread thread, jlong session_id, jlong* stopped_id);
+                                                                      jboolean only_handshake, char const* address, jlong* session_id);
+extern "C" typedef onDemandAllowDebuggingError(JNICALL *onDemand_allowDebuggingPtr)(JNIEnv* env, jthread thread, jlong session_id);
+extern "C" typedef onDemandStoppingError(JNICALL *onDemand_stopDebuggingPtr)(JNIEnv* env, jthread thread, jlong session_id, jlong* stopped_id);
 
 static void ensure_debug_on_demand_initialized() {
   if (debug_on_demand_initialized) {
@@ -1140,24 +1150,34 @@ static onDemandState onDemand_getState(jboolean* is_server, char* address, jint 
 }
 
 static onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thread, jlong timeout, jboolean is_server,
-                                                     char const* address, jlong* session_id) {
+                                                     jboolean only_handshake, char const* address, jlong* session_id) {
   ensure_debug_on_demand_initialized();
 
   if (onDemand_functions[2] != NULL) {
-    return ((onDemand_startDebuggingPtr) onDemand_functions[2])(env, thread, timeout, is_server, address, session_id);
+    return ((onDemand_startDebuggingPtr) onDemand_functions[2])(env, thread, timeout, is_server, only_handshake, address, session_id);
   }
 
   return STARTING_ERROR_DISABLED;
 }
 
-static onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jlong session_id, jlong* stopped_id) {
+static onDemandAllowDebuggingError onDemand_allowDebugging(JNIEnv* env, jthread thread, jlong session_id) {
   ensure_debug_on_demand_initialized();
 
   if (onDemand_functions[3] != NULL) {
-    return ((onDemand_stopDebuggingPtr) onDemand_functions[3])(env, thread, session_id, stopped_id);
+    return ((onDemand_allowDebuggingPtr) onDemand_functions[3])(env, thread, session_id);
   }
 
-  return STOPPING_ERROR_DISABLED;
+  return ALLOW_DEBUGGING_ERROR_DISABLED;
+}
+
+static onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jlong session_id, jlong* stopped_id) {
+    ensure_debug_on_demand_initialized();
+
+    if (onDemand_functions[4] != NULL) {
+        return ((onDemand_stopDebuggingPtr) onDemand_functions[4])(env, thread, session_id, stopped_id);
+    }
+
+    return STOPPING_ERROR_DISABLED;
 }
 
 DebugOnDemandInfoDCmd::DebugOnDemandInfoDCmd(outputStream* output, bool heap) : DCmd(output, heap) {
@@ -1203,6 +1223,8 @@ void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
             } else {
               output()->print_cr("The debugging system is currently waiting for the debugger to be connected.");
             }
+          } else if (state == ON_DEMAND_WATING_AFTER_HANDSHAKE) {
+            output()->print_cr("The debugger has connected and finished the handshake. It is now waiting for permission to continue.");
           } else if (state == ON_DEMAND_CONNECTED) {
             output()->print_cr("The debugger is currently attached and debugging.");
           } else if (state == ON_DEMAND_STOPPING) {
@@ -1223,9 +1245,12 @@ void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
 DebugOnDemandStartDCmd::DebugOnDemandStartDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap),
   _address("address", "The address to connect to (in client mode) or the address to listen on (in server mode)", "STRING",  true),
   _is_server("is_server", "If true we use server mode and client mode otherwise", "BOOLEAN", true, "true"),
+  _only_handshake("only_handshake", "If true the VM will connect and do the handshake, but then wait until debugging is allowed "
+                  "via the DoD.allow command", "BOOLEAN", false, "false"),
   _timeout("timeout", "The timeout in seconds are which the connect is treated as failed", "INT", false, "20") {
   _dcmdparser.add_dcmd_option(&_address);
   _dcmdparser.add_dcmd_option(&_is_server);
+  _dcmdparser.add_dcmd_option(&_only_handshake);
   _dcmdparser.add_dcmd_option(&_timeout);
 }
 
@@ -1243,8 +1268,8 @@ int DebugOnDemandStartDCmd::num_arguments() {
 
 void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
   if (_timeout.value() <= 0) {
-     output()->print_cr("timeout must be > 0");
-     return;
+    output()->print_cr("timeout must be > 0");
+    return;
   }
 
   JavaThread* thread = (JavaThread*) THREAD;
@@ -1253,7 +1278,8 @@ void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
   ThreadToNativeFromVM ttn(thread);
 
   jlong session_id;
-  onDemandStartingError error = onDemand_startDebugging(thread->jni_environment(), jt, timeout, _is_server.value() ? JNI_TRUE : JNI_FALSE, _address.value(), &session_id);
+  onDemandStartingError error = onDemand_startDebugging(thread->jni_environment(), jt, timeout, _is_server.value() ? JNI_TRUE : JNI_FALSE,
+                                                        _only_handshake.value() ? JNI_TRUE : JNI_FALSE, _address.value(), &session_id);
 
   if (error == STARTING_ERROR_OK) {
     output()->print_cr("Started debug session " JLONG_FORMAT ".", session_id);
@@ -1266,20 +1292,58 @@ void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
   }
 }
 
+DebugOnDemandAllowDCmd::DebugOnDemandAllowDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap),
+  _session_id("session_id", "The session id of the debugging session to allow to continue", "INT", true, "-1") {
+  _dcmdparser.add_dcmd_option(&_session_id);
+}
+
+int DebugOnDemandAllowDCmd::num_arguments() {
+  ResourceMark rm;
+  DebugOnDemandAllowDCmd* dcmd = new DebugOnDemandAllowDCmd(NULL, false);
+
+  if (dcmd != NULL) {
+    DCmdMark mark(dcmd);
+    return dcmd->_dcmdparser.num_arguments();
+  } else {
+    return 0;
+  }
+}
+
+void DebugOnDemandAllowDCmd::execute(DCmdSource source, TRAPS) {
+  JavaThread* thread = (JavaThread*) THREAD;
+  jthread jt = JNIHandles::make_local(thread->threadObj());
+  jlong session_id = _session_id.value();
+  ThreadToNativeFromVM ttn(thread);
+
+  onDemandAllowDebuggingError error = onDemand_allowDebugging(thread->jni_environment(), jt, session_id);
+  if (error == ALLOW_DEBUGGING_ERROR_OK) {
+    output()->print_cr("Allowed debugging session " JLONG_FORMAT " to start.", session_id);
+  } else if (error == ALLOW_DEBUGGING_ERROR_DISABLED) {
+    output()->print_cr("Allowing debugging session failed, since debug on demand is disabled.");
+  } else if (error == ALLOW_DEBUGGING_ERROR_WRONG_STATE) {
+    output()->print_cr("Allowing the debugging session " JLONG_FORMAT " to start failed, since the VM was not in waiting to activate it", session_id);
+  } else if (error == ALLOW_DEBUGGING_ERROR_WRONG_SESSION_ID) {
+    output()->print_cr("Allowing the debugging session " JLONG_FORMAT " to start failed, since the session was not active anymore.", session_id);
+  } else {
+    output()->print_cr("Stopping debug session failed because of unknown error %d.", error);
+  }
+}
+
 DebugOnDemandStopDCmd::DebugOnDemandStopDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap),
- _session_id("session_id", "The session id of the debugging session to stop or -1 to stop the current one.", "INT", false, "-1") {
+  _session_id("session_id", "The session id of the debugging session to stop or -1 to stop the current one.", "INT", false, "-1") {
+  _dcmdparser.add_dcmd_option(&_session_id);
 }
 
 int DebugOnDemandStopDCmd::num_arguments() {
-    ResourceMark rm;
-    DebugOnDemandStopDCmd* dcmd = new DebugOnDemandStopDCmd(NULL, false);
+  ResourceMark rm;
+  DebugOnDemandStopDCmd* dcmd = new DebugOnDemandStopDCmd(NULL, false);
 
-    if (dcmd != NULL) {
-        DCmdMark mark(dcmd);
-        return dcmd->_dcmdparser.num_arguments();
-    } else {
-        return 0;
-    }
+  if (dcmd != NULL) {
+    DCmdMark mark(dcmd);
+    return dcmd->_dcmdparser.num_arguments();
+  } else {
+    return 0;
+  }
 }
 
 void DebugOnDemandStopDCmd::execute(DCmdSource source, TRAPS) {
@@ -1291,12 +1355,12 @@ void DebugOnDemandStopDCmd::execute(DCmdSource source, TRAPS) {
 
   onDemandStoppingError error = onDemand_stopDebugging(thread->jni_environment(), jt, session_id, &stopped_id);
   if (error == STOPPING_ERROR_OK) {
-      output()->print_cr("Stopped debugging session " JLONG_FORMAT ".", stopped_id);
+    output()->print_cr("Stopped debugging session " JLONG_FORMAT ".", stopped_id);
   } else if (error == STOPPING_ERROR_DISABLED) {
-      output()->print_cr("Stopping debugging session failed, since debug on demand is disabled.");
+    output()->print_cr("Stopping debugging session failed, since debug on demand is disabled.");
   } else if (error == STOPPING_ERROR_WRONG_STATE) {
-      output()->print_cr("Stopping debugging session " JLONG_FORMAT " failed, since the session was not active.", stopped_id);
+    output()->print_cr("Stopping debugging session " JLONG_FORMAT " failed, since the session was not active.", stopped_id);
   } else {
-      output()->print_cr("Stopping debug session failed because of unknown error %d.", error);
+    output()->print_cr("Stopping debug session failed because of unknown error %d.", error);
   }
 }
