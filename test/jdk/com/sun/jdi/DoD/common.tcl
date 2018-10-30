@@ -49,6 +49,27 @@ proc wait_for_debugging_to_be_inactive {wait_timeout} {
   fail "Failed to wait for debugging to be inactive."
 }
 
+proc wait_for_allow {wait_timeout} {
+  global prog_id jcmd_path
+
+  set start_time [clock milliseconds]
+  set is_waiting false
+
+  while {[clock milliseconds] - $start_time <= [expr $wait_timeout * 1000]} {
+    spawn $jcmd_path $prog_id DoD.info
+	expect {
+	  "The debugger has connected and finished the handshake. It is now waiting for permission to continue." {expect eof; wait; set is_waiting true}
+	  eof {wait; after 100}
+	}
+	if {$is_waiting == true} {
+	  puts "Is waiting"
+	  return;
+	}
+  }
+
+  fail "Failed to wait for debugging to wait for allowance."
+}
+
 proc show_threads {jdb_id} {
   send -i $jdb_id "suspend\n"
   expect {
@@ -113,11 +134,11 @@ proc end_jdb_by_stop {jdb_id} {
   wait_for_jdb_quit $jdb_id
 }
 
-proc start_debugging {address is_server dod_timeout wait_timeout} {
+proc start_debugging {address is_server only_handshake dod_timeout wait_timeout} {
   global prog_id jcmd_path
 
   wait_for_debugging_to_be_inactive $wait_timeout
-  spawn $jcmd_path $prog_id DoD.start address=$address is_server=$is_server timeout=$dod_timeout
+  spawn $jcmd_path $prog_id DoD.start address=$address is_server=$is_server only_handshake=$only_handshake timeout=$dod_timeout
   expect {
 	-r {Started debug session ([0-9]*)} {expect eof; wait; set session $expect_out(1,string)}
 	eof {fail "Failed to start debugging"}

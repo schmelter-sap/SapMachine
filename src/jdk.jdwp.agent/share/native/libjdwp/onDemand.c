@@ -295,6 +295,7 @@ jboolean onDemand_notifyConnectEstablished() {
 
     while (onDemandHandshakeOnly) {
         if (onDemandCurrentState == ON_DEMAND_STOPPING) {
+            onDemandHandshakeOnly = JNI_FALSE;
             result = JNI_FALSE;
         } else {
             onDemandCurrentState = ON_DEMAND_WATING_AFTER_HANDSHAKE;
