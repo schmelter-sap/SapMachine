@@ -2,7 +2,7 @@
 
 if [[ $# < 2 ]]
 then
-  echo "Syntax: run_stress <jdk-image-dir> <0-15|all> [runs]"
+  echo "Syntax: run_stress <jdk-image-dir> <0-20|all> [runs]"
   exit 1
 fi
 

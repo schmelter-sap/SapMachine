@@ -1,7 +1,7 @@
 #!/usr/bin/env expect
 
 set timeout -1
-set wait_timeout 10
+set wait_timeout 15
 set port 8000
 
 proc fail {msg} {
@@ -9,19 +9,22 @@ proc fail {msg} {
   exit 1
 }
 
-proc attach_jdb_do_work_and_detach {jdb_procs wait_timeout} {
+proc attach_jdb_do_work_and_detach {use_allow jdb_procs wait_timeout} {
   global jdb_path
 
-  start_debugging localhost:0 true false 10 $wait_timeout
+  start_debugging localhost:0 true $use_allow 10 $wait_timeout
   set port [get_listen_port_from_debuggee $wait_timeout]
   spawn $jdb_path -connect com.sun.jdi.SocketAttach:port=$port
   set jdb_id $spawn_id
+  if {$use_allow == true} {
+    allow_debugging $wait_timeout
+  }
   foreach jdb_proc $jdb_procs {
     $jdb_proc $jdb_id
   }
 }
 
-proc listen_on_jdb_to_work_and_detach {jdb_procs wait_timeout} {
+proc listen_on_jdb_to_work_and_detach {use_allow jdb_procs wait_timeout} {
   global jdb_path
  
   spawn $jdb_path -connect com.sun.jdi.SocketListen:port=0
@@ -30,7 +33,10 @@ proc listen_on_jdb_to_work_and_detach {jdb_procs wait_timeout} {
     -re {Listening at address: ([^:\r\n]*):([0-9]*)} {set port $expect_out(2,string)}
     eof {fail "Unexpected end"}
   }
-  start_debugging localhost:$port false false 10 $wait_timeout
+  start_debugging localhost:$port false $use_allow 10 $wait_timeout
+  if {$use_allow == true} {
+    allow_debugging $wait_timeout
+  }
   foreach jdb_proc $jdb_procs {
     $jdb_proc $jdb_id
   }
@@ -150,10 +156,10 @@ proc execute_test {test_id wait_timeout} {
   set jdb_cmds_1 {show_threads print_expr end_jdb_by_stop}
 
   switch $test_id {
-    "0" {attach_jdb_do_work_and_detach $jdb_cmds_1 $wait_timeout}
-    "1" {listen_on_jdb_to_work_and_detach $jdb_cmds_1 $wait_timeout}
-    "2" {attach_jdb_do_work_and_detach $jdb_cmds_1 $wait_timeout}
-    "3" {listen_on_jdb_to_work_and_detach $jdb_cmds_1 $wait_timeout}
+    "0" {attach_jdb_do_work_and_detach false $jdb_cmds_1 $wait_timeout}
+    "1" {listen_on_jdb_to_work_and_detach false $jdb_cmds_1 $wait_timeout}
+    "2" {attach_jdb_do_work_and_detach false $jdb_cmds_1 $wait_timeout}
+    "3" {listen_on_jdb_to_work_and_detach false $jdb_cmds_1 $wait_timeout}
     "4" {connect_with_fake_jdb direct-disconnect $wait_timeout}
     "5" {connect_with_fake_jdb wrong-handshake $wait_timeout}
     "6" {connect_with_fake_jdb wrong-packet $wait_timeout}
@@ -166,6 +172,10 @@ proc execute_test {test_id wait_timeout} {
    "13" {timeout_in_waiting_after_attach $wait_timeout}
    "14" {stop_in_waiting_after_connect $wait_timeout}
    "15" {stop_in_waiting_after_attach $wait_timeout}
+   "16" {attach_jdb_do_work_and_detach true $jdb_cmds_1 $wait_timeout}
+   "17" {listen_on_jdb_to_work_and_detach true $jdb_cmds_1 $wait_timeout}
+   "18" {attach_jdb_do_work_and_detach true $jdb_cmds_1 $wait_timeout}
+   "19" {listen_on_jdb_to_work_and_detach true $jdb_cmds_1 $wait_timeout}
   }
 }
 
@@ -178,7 +188,7 @@ set max_run [lindex $argv 3]
 
 while {$run < $max_run} {
   if {[lindex $argv 2] == "all"} {
-    execute_test [expr int(rand() * 16)] 10
+    execute_test [expr int(rand() * 20)] 10
   } else {
     execute_test [lindex $argv 2] 10
   }
