@@ -418,7 +418,7 @@ JNIEXPORT onDemandStartingError onDemand_startDebugging(JNIEnv* env, jthread thr
 }
 
 JNIEXPORT onDemandallowDebuggingError onDemand_allowDebugging(JNIEnv* env, jthread thread, jlong session_id) {
-    onDemandStoppingError result;
+    onDemandallowDebuggingError result;
 
     if (!enabled) {
         return ALLOW_DEBUGGING_ERROR_DISABLED;
