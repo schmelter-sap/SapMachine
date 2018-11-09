@@ -37,6 +37,7 @@
 #include "runtime/fieldDescriptor.inline.hpp"
 #include "runtime/flags/jvmFlag.hpp"
 #include "runtime/handles.inline.hpp"
+#include "runtime/interfaceSupport.inline.hpp"
 #include "runtime/javaCalls.hpp"
 #include "runtime/os.hpp"
 #include "services/diagnosticArgument.hpp"
@@ -122,6 +123,11 @@ void DCmdRegistrant::register_dcmds(){
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JMXStartLocalDCmd>(jmx_agent_export_flags, true,false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JMXStopRemoteDCmd>(jmx_agent_export_flags, true,false));
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<JMXStatusDCmd>(jmx_agent_export_flags, true,false));
+
+  // Debug on demand (only make sense with JVMTI since the agentlib needs it).
+#if INCLUDE_JVMTI
+  DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnDemandStartDCmd>(full_export, true, false));
+#endif
 
 }
 
@@ -1053,4 +1059,49 @@ void TouchedMethodsDCmd::execute(DCmdSource source, TRAPS) {
 
 int TouchedMethodsDCmd::num_arguments() {
   return 0;
+}
+
+extern "C" typedef char const* (JNICALL *onDemand_startDebuggingPtr)(JNIEnv* env, jthread thread);
+static onDemand_startDebuggingPtr dod_start_ptr = NULL;
+
+static void ensure_debug_on_demand_initialized() {
+  if (dod_start_ptr) {
+    return;
+  }
+
+  AgentLibrary* agent;
+
+  for (agent = Arguments::agents(); agent != NULL; agent = agent->next()) {
+    if ((strcmp("jdwp", agent->name()) == 0) && (dod_start_ptr == NULL)) {
+        char const* func = "onDemand_startDebugging";
+      dod_start_ptr = (onDemand_startDebuggingPtr) os::find_agent_function(agent, false, &func, 1);
+    }
+  }
+}
+
+static char const* onDemand_startDebugging(JNIEnv* env, jthread thread) {
+  ensure_debug_on_demand_initialized();
+
+  if (dod_start_ptr) {
+    return dod_start_ptr(env, thread);
+  }
+
+  return "Could not find jdwp agent.";
+}
+
+DebugOnDemandStartDCmd::DebugOnDemandStartDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap) {
+}
+
+void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
+  JavaThread* thread = (JavaThread*) THREAD;
+  jthread jt = JNIHandles::make_local(thread->threadObj());
+  ThreadToNativeFromVM ttn(thread);
+
+  const char* msg = onDemand_startDebugging(thread->jni_environment(), jt);
+
+  if (msg == NULL) {
+      msg = "Started debugug on demand.";
+  }
+
+  output()->print_cr(msg);
 }

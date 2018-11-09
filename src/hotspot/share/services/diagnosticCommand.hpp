@@ -867,4 +867,24 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+class DebugOnDemandStartDCmd : public DCmdWithParser {
+public:
+  DebugOnDemandStartDCmd(outputStream* output, bool heap);
+  static const char* name() {
+    return "DoD.start";
+  }
+  static const char* description() {
+    return "Starts debugging the VM.";
+  }
+  static const char* impact() {
+    return "High: Switches the VM into debug mode.";
+  }
+  static const JavaPermission permission() {
+    JavaPermission p = { "java.lang.management.ManagementPermission", "monitor", NULL };
+    return p;
+  }
+  static int num_arguments() { return 0; }
+  virtual void execute(DCmdSource source, TRAPS);
+};
+
 #endif // SHARE_VM_SERVICES_DIAGNOSTICCOMMAND_HPP

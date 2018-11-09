@@ -28,6 +28,7 @@
 
 void debugInit_waitInitComplete(void);
 jboolean debugInit_isInitComplete(void);
+void debugInit_initForOnDemand(JNIEnv *env, jthread thread);
 
 /*
  * Access to debug options

@@ -37,6 +37,7 @@
 #include "debugLoop.h"
 #include "bag.h"
 #include "invoker.h"
+#include "onDemand.h"
 #include "sys.h"
 
 /* How the options get to OnLoad: */
@@ -266,6 +267,8 @@ DEF_Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
         /* Do not let VM get a fatal error, we don't want a core dump here. */
         forceExit(1); /* Kill entire process, no core dump wanted */
     }
+
+    onDemand_init();
 
     /* Parse input options */
     if (!parseOptions(options)) {
@@ -602,6 +605,14 @@ jboolean
 debugInit_isInitComplete(void)
 {
     return initComplete;
+}
+
+/*
+ * Called by debugging on demand to startthe debugging backend.
+ */
+void debugInit_initForOnDemand(JNIEnv *env, jthread thread) {
+    initialize(env, thread, EI_VM_INIT);
+    vmInitialized = JNI_TRUE;
 }
 
 /*
@@ -1010,6 +1021,7 @@ parseOptions(char *options)
     int length;
     char *str;
     char *errmsg;
+    jboolean onDemand = JNI_FALSE;
 
     /* Set defaults */
     gdata->assertOn     = DEFAULT_ASSERT_ON;
@@ -1229,6 +1241,10 @@ parseOptions(char *options)
             if ( !get_boolean(&str, &useStandardAlloc) ) {
                 goto syntax_error;
             }
+        } else if (strcmp(buf, "ondemand") == 0) {
+            if (!get_boolean(&str, &onDemand)) {
+                goto syntax_error;
+            }
         } else {
             goto syntax_error;
         }
@@ -1254,7 +1270,6 @@ parseOptions(char *options)
         goto bad_option_with_errmsg;
     }
 
-
     if (!isServer) {
         jboolean specified = bagEnumerateOver(transports, checkAddress, NULL);
         if (!specified) {
@@ -1278,6 +1293,19 @@ parseOptions(char *options)
             errmsg = "Specify launch=<command line> when using onthrow or onuncaught suboption";
             goto bad_option_with_errmsg;
         }
+    }
+
+    if (onDemand) {
+        if (launchOnInit != NULL) {
+            errmsg = "Cannot combine ondemand and launch suboptions";
+            goto bad_option_with_errmsg;
+        }
+        if (!isServer) {
+            errmsg = "Cannot use ondemand with server=n";
+            goto bad_option_with_errmsg;
+        }
+        initOnStartup = JNI_FALSE;
+        onDemand_enable();
     }
 
     return JNI_TRUE;
