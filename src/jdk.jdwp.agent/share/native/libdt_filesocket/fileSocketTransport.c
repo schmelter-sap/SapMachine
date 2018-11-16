@@ -42,6 +42,8 @@ typedef HANDLE filesocket_handle_t;
 
 #define MAX_FILE_SOCKET_PATH_LEN 160
 #define MAX_DATA_SIZE 1000
+#define USE_HANDSHAKE 1
+#define HANDSHAKE "JDWP-Handshake"
 
 static filesocket_handle_t handle = INVALID_FILESOCKET_HANDLE;
 static jboolean fake_open = JNI_FALSE;
@@ -67,6 +69,7 @@ static void log_error(char const* format, ...) {
 #ifdef _WIN32
 
 static PTOKEN_USER our_user_sid = (PTOKEN_USER) &our_user_sid;
+static filesocket_handle_t handle2 = INVALID_FILESOCKET_HANDLE;
 
 static PTOKEN_USER GetUserSid() {
     if (our_user_sid == (PTOKEN_USER) &our_user_sid) {
@@ -102,6 +105,7 @@ static PTOKEN_USER GetUserSid() {
 
 static void fileSocketTransport_CloseImpl() {
     CloseHandle(handle);
+    CloseHandle(handle2);
 }
 
 static void fileSocketTransport_AcceptImpl() {
@@ -140,6 +144,10 @@ static void fileSocketTransport_AcceptImpl() {
 
     handle = CreateNamedPipe(path, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
                              1, 4096, 4096, NMPWAIT_USE_DEFAULT_WAIT, sec);
+    path[strlen(path) + 1] = '\0';
+    path[strlen(path)] = '2';
+    handle2 = CreateNamedPipe(path, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                              1, 4096, 4096, NMPWAIT_USE_DEFAULT_WAIT, sec);
     free(sec);
 
     if (handle == INVALID_HANDLE_VALUE) {
@@ -151,6 +159,8 @@ static void fileSocketTransport_AcceptImpl() {
         log_error("Could not connect pipe, error code %lld", (long long) GetLastError());
         fileSocketTransport_CloseImpl();
     }
+
+    ConnectNamedPipe(handle2, NULL);
 }
 
 static int fileSocketTransport_ReadImpl(char* buffer, int size) {
@@ -167,7 +177,7 @@ static int fileSocketTransport_ReadImpl(char* buffer, int size) {
 
 static int fileSocketTransport_WriteImpl(char* buffer, int size) {
     DWORD written = 0;
-    BOOL succ = WriteFile(handle, (LPVOID) buffer, (DWORD) size, &written, NULL);
+    BOOL succ = WriteFile(handle2, (LPVOID) buffer, (DWORD) size, &written, NULL);
 
     if (!succ) {
         log_error("Could not write packet (error %lld)", (long long) GetLastError());
@@ -231,15 +241,6 @@ static jdwpTransportError JNICALL fileSocketTransport_StopListening(jdwpTranspor
     return JDWPTRANSPORT_ERROR_NONE;
 }
 
-static jdwpTransportError JNICALL fileSocketTransport_Accept(jdwpTransportEnv* env, jlong accept_timeout, jlong handshake_timeout) {
-    fileSocketTransport_AcceptImpl();
-    if (handle == INVALID_FILESOCKET_HANDLE) {
-        fake_open = JNI_TRUE;
-    }
-
-    return JDWPTRANSPORT_ERROR_NONE;
-}
-
 static jboolean JNICALL fileSocketTransport_IsOpen(jdwpTransportEnv* env) {
     return fake_open || (handle != INVALID_FILESOCKET_HANDLE);
 }
@@ -280,11 +281,33 @@ static int fileSocketTransport_WriteFully(char* buf, int len) {
     return written;
 }
 
+static jdwpTransportError JNICALL fileSocketTransport_Accept(jdwpTransportEnv* env, jlong accept_timeout, jlong handshake_timeout) {
+    fileSocketTransport_AcceptImpl();
+
+    if (handle == INVALID_FILESOCKET_HANDLE) {
+        fake_open = JNI_TRUE;
+    } else {
+#if USE_HANDSHAKE
+        char buf[sizeof(HANDSHAKE)];
+        fileSocketTransport_ReadFully(buf, (int) strlen(HANDSHAKE));
+        fileSocketTransport_WriteFully(HANDSHAKE, (int) strlen(HANDSHAKE));
+
+        if (strcmp(buf, HANDSHAKE) != 0) {
+            fake_open = JNI_TRUE;
+        }
+#endif
+    }
+
+    return JDWPTRANSPORT_ERROR_NONE;
+}
+
 static jdwpTransportError JNICALL fileSocketTransport_ReadPacket(jdwpTransportEnv* env, jdwpPacket *packet) {
     jint length, data_len, n;
 
     if (handle == INVALID_FILESOCKET_HANDLE) {
         fake_open = JNI_FALSE;
+        return JDWPTRANSPORT_ERROR_IO_ERROR;
+    } else if (fake_open) {
         return JDWPTRANSPORT_ERROR_IO_ERROR;
     }
 
@@ -373,6 +396,8 @@ static jdwpTransportError JNICALL fileSocketTransport_WritePacket(jdwpTransportE
 
     if (handle == INVALID_FILESOCKET_HANDLE) {
         fake_open = JNI_FALSE;
+        return JDWPTRANSPORT_ERROR_IO_ERROR;
+    } else if (fake_open) {
         return JDWPTRANSPORT_ERROR_IO_ERROR;
     }
 
