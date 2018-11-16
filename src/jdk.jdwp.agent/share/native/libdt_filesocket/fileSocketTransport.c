@@ -69,7 +69,11 @@ static void log_error(char const* format, ...) {
 #ifdef _WIN32
 
 static PTOKEN_USER our_user_sid = (PTOKEN_USER) &our_user_sid;
-static filesocket_handle_t handle2 = INVALID_FILESOCKET_HANDLE;
+static OVERLAPPED read_event;
+static OVERLAPPED write_event;
+static OVERLAPPED cancel_event;
+static OVERLAPPED accept_event;
+static OVERLAPPED* events[] = { &read_event, &write_event, &cancel_event, &accept_event };
 
 static PTOKEN_USER GetUserSid() {
     if (our_user_sid == (PTOKEN_USER) &our_user_sid) {
@@ -102,10 +106,43 @@ static PTOKEN_USER GetUserSid() {
     return our_user_sid;
 }
 
+static void destroyEvents(OVERLAPPED** events, int nr_of_events) {
+    int i;
+
+    for (i = 0; i < nr_of_events; ++i) {
+        if (events[i]->hEvent != NULL) {
+            CloseHandle(events[i]->hEvent);
+        }
+
+        ZeroMemory(events[i], sizeof(OVERLAPPED));
+    }
+}
+
+static jboolean initEvents(OVERLAPPED** events, int nr_of_events) {
+    int i;
+
+    destroyEvents(events, nr_of_events);
+
+    for (i = 0; i < nr_of_events; ++i) {
+        ZeroMemory(events[i], sizeof(OVERLAPPED));
+        events[i]->hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+        if (events[i]->hEvent == NULL) {
+            destroyEvents(events, i - 1);
+            return JNI_FALSE;
+        }
+    }
+
+    return JNI_TRUE;
+}
 
 static void fileSocketTransport_CloseImpl() {
-    CloseHandle(handle);
-    CloseHandle(handle2);
+    SetEvent(cancel_event.hEvent);
+
+    if (handle != INVALID_HANDLE_VALUE) {
+        CloseHandle(handle);
+        handle = INVALID_HANDLE_VALUE;
+    }
 }
 
 static void fileSocketTransport_AcceptImpl() {
@@ -113,6 +150,11 @@ static void fileSocketTransport_AcceptImpl() {
     LPSECURITY_ATTRIBUTES sec = NULL;
     char sec_spec[1024];
     static char const* user_id = NULL;
+    jboolean connected = JNI_FALSE;
+
+    if (!initEvents(events, sizeof(events) / sizeof(events[0]))) {
+        return;
+    }
 
     if (user_id == NULL) {
         PTOKEN_USER sid = GetUserSid();
@@ -142,12 +184,8 @@ static void fileSocketTransport_AcceptImpl() {
         return;
     }
 
-    handle = CreateNamedPipe(path, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+    handle = CreateNamedPipe(path, FILE_FLAG_OVERLAPPED | PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
                              1, 4096, 4096, NMPWAIT_USE_DEFAULT_WAIT, sec);
-    path[strlen(path) + 1] = '\0';
-    path[strlen(path)] = '2';
-    handle2 = CreateNamedPipe(path, PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
-                              1, 4096, 4096, NMPWAIT_USE_DEFAULT_WAIT, sec);
     free(sec);
 
     if (handle == INVALID_HANDLE_VALUE) {
@@ -155,36 +193,154 @@ static void fileSocketTransport_AcceptImpl() {
         return;
     }
 
-    if (!ConnectNamedPipe(handle, NULL)) {
-        log_error("Could not connect pipe, error code %lld", (long long) GetLastError());
-        fileSocketTransport_CloseImpl();
+    if (!initEvents(events, sizeof(events) / sizeof(events[0]))) {
+        CloseHandle(handle);
+        handle = INVALID_HANDLE_VALUE;
     }
 
-    ConnectNamedPipe(handle2, NULL);
+    ResetEvent(accept_event.hEvent);
+
+    while (!connected) {
+        DWORD lastError;
+
+        connected = ConnectNamedPipe(handle, &accept_event);
+        lastError = GetLastError();
+
+        if (!connected && (lastError == ERROR_PIPE_CONNECTED)) {
+            connected = TRUE;
+        }
+
+        if (!connected) {
+            if (lastError == ERROR_IO_PENDING) {
+                // The ConnectNamedPipe is still in progress. wait until signaled...
+                // we wait for two different signals, not both signals must be 1, wait until signal is seen
+                HANDLE hOverlapped[2] = { accept_event.hEvent, cancel_event.hEvent };
+                DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
+                switch (waitResult) {
+                case WAIT_OBJECT_0:
+                    // client has connected
+                    if (HasOverlappedIoCompleted(&accept_event)) {
+                        connected = TRUE;
+                    } else {
+                        CancelIo(handle);
+                    }
+                    break;
+                case WAIT_OBJECT_0 + 1:
+                    // this FileSocket was closed. Must leave accept with a pending exception
+                    CancelIo(handle);
+                    CloseHandle(handle);
+                    handle = INVALID_HANDLE_VALUE;
+                    log_error("Accept error : Server endpoint closed.");
+                    return;
+                default:
+                    // should not happen
+                    CancelIo(handle);
+                    CloseHandle(handle);
+                    handle = INVALID_HANDLE_VALUE;
+                    log_error("Accept error : Unknown.");
+                    return;
+                }
+            } else {
+                // we definitely cannot get a new client connection (for example pipe was closed)
+                CloseHandle(handle);
+                handle = INVALID_HANDLE_VALUE;
+                log_error("Accept error : %d.", (int) lastError);
+                return;
+            }
+        }
+    }
 }
 
 static int fileSocketTransport_ReadImpl(char* buffer, int size) {
-    DWORD read = 0;
-    BOOL succ = ReadFile(handle, (LPVOID) buffer, (DWORD) size, &read, NULL);
+    DWORD nread = 0;
 
-    if (!succ) {
-        log_error("Could not read packet (error %lld)", (long long) GetLastError());
-        return -1;
+    ResetEvent(read_event.hEvent);
+
+    if (ReadFile(handle, (LPVOID) buffer, (DWORD) size, NULL, &read_event)) {
+        // directly returned synchronously. get actual number of read bytes.
+        if (!GetOverlappedResult(handle, &read_event, &nread, FALSE)) {
+            DWORD lastError = GetLastError();
+            nread = 0;
+            log_error("Read failed: %d", (int) lastError);
+        }
+    } else {
+        DWORD lastError = GetLastError();
+        switch (lastError) {
+        case ERROR_IO_PENDING: {
+            HANDLE hOverlapped[2] = { read_event.hEvent, cancel_event.hEvent };
+            DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
+
+            switch (waitResult) {
+            case WAIT_OBJECT_0:
+                // signalled on the overlapped event handle, check the result
+                if (!GetOverlappedResult(handle, &read_event, &nread, FALSE)) {
+                    lastError = GetLastError();
+                    nread = 0;
+                    log_error("Read failed: %d", (int) lastError);
+                }
+                break;
+            case WAIT_TIMEOUT:
+            case WAIT_OBJECT_0 + 1:
+                CancelIo(handle);
+                nread = 0;
+                break;
+            default:
+                lastError = GetLastError();
+                CancelIo(handle);
+                nread = 0;
+                log_error("Read failed: %d", (int) lastError);
+                break;
+            }
+            break;
+        }
+        default:
+            nread = 0;
+            log_error("Read failed: %d", (int) lastError);
+        }
     }
 
-    return (int) read;
+    return (int) nread;
 }
 
 static int fileSocketTransport_WriteImpl(char* buffer, int size) {
-    DWORD written = 0;
-    BOOL succ = WriteFile(handle2, (LPVOID) buffer, (DWORD) size, &written, NULL);
+    DWORD nwrite = 0;
 
-    if (!succ) {
-        log_error("Could not write packet (error %lld)", (long long) GetLastError());
-        return -1;
+    ResetEvent(write_event.hEvent);
+
+    if (WriteFile(handle, buffer, (DWORD) size, NULL, &write_event)) // overlapped
+    {
+        // get actual number of written bytes
+        if (!GetOverlappedResult(handle, &write_event, &nwrite, FALSE)) {
+            log_error("Write failed: %d", (int) GetLastError());
+            return 0;
+        }
+    } else {
+        // wait for IO
+        if (GetLastError() == ERROR_IO_PENDING) {
+            HANDLE hOverlapped[2] = { write_event.hEvent, cancel_event.hEvent };
+            DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
+
+            switch (waitResult) {
+            case WAIT_OBJECT_0:
+                // signalled on the overlapped event handle, check the result
+                if (!GetOverlappedResult(handle, &write_event, &nwrite, FALSE)) {
+                    log_error("Write failed: %d", (int) GetLastError());
+                    return 0;
+                }
+                break;
+            case WAIT_TIMEOUT:
+            case WAIT_OBJECT_0 + 1:
+                CancelIo(handle);
+                log_error("Write failed: %d", (int) waitResult);
+                return 0;
+            default:
+                log_error("Write_failed: %d", (int) waitResult);
+                return 0;
+            }
+        }
     }
 
-    return (int) written;
+    return (int) nwrite;
 }
 
 #endif
