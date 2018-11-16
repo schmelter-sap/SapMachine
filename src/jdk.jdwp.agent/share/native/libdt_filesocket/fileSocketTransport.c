@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c)  2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,24 +28,18 @@
 #include <stdio.h>
 #include "jni.h"
 #include "../include/jdwpTransport.h"
+#include "fileSocketTransport.h"
 
 #ifdef _WIN32
-#include <windows.h>
 #include <winsock2.h>
-#include <process.h>
-#include <sddl.h>
-
-typedef HANDLE filesocket_handle_t;
-#define INVALID_FILESOCKET_HANDLE INVALID_HANDLE_VALUE
 #else
 #endif
 
-#define MAX_FILE_SOCKET_PATH_LEN 160
+#define MAX_FILE_SOCKET_PATH_LEN 4096
 #define MAX_DATA_SIZE 1000
 #define USE_HANDSHAKE 1
 #define HANDSHAKE "JDWP-Handshake"
 
-static filesocket_handle_t handle = INVALID_FILESOCKET_HANDLE;
 static jboolean fake_open = JNI_FALSE;
 static jboolean initialized = JNI_FALSE;
 static JavaVM *jvm;
@@ -55,7 +49,7 @@ static char last_error[2048];
 static struct jdwpTransportNativeInterface_ nif;
 static jdwpTransportEnv single_env = (jdwpTransportEnv) &nif;
 
-static void log_error(char const* format, ...) {
+void log_error(char const* format, ...) {
     va_list ap;
     va_start(ap, format);
     vsnprintf(last_error, sizeof(last_error), format, ap);
@@ -63,288 +57,6 @@ static void log_error(char const* format, ...) {
     va_end(ap);
     printf("Error: %s\n", last_error);
 }
-
-/******************************************** WINDOWS IMPLEMENTATION *********************************/
-
-#ifdef _WIN32
-
-static PTOKEN_USER our_user_sid = (PTOKEN_USER) &our_user_sid;
-static OVERLAPPED read_event;
-static OVERLAPPED write_event;
-static OVERLAPPED cancel_event;
-static OVERLAPPED accept_event;
-static OVERLAPPED* events[] = { &read_event, &write_event, &cancel_event, &accept_event };
-
-static PTOKEN_USER GetUserSid() {
-    if (our_user_sid == (PTOKEN_USER) &our_user_sid) {
-        HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, _getpid());
-        HANDLE token = NULL;
-        our_user_sid = NULL;
-
-        if (process != NULL && OpenProcessToken(process, TOKEN_QUERY, &token)) {
-            DWORD size = 0;
-            PTOKEN_USER user = NULL;
-            BOOL success;
-
-            GetTokenInformation(token, TokenUser, NULL, 0, &size);
-            user = (PTOKEN_USER) malloc(size);
-            success = GetTokenInformation(token, TokenUser, user, size, &size);
-
-            CloseHandle(token);
-            CloseHandle(process);
-
-            if (success &&  IsValidSid(user->User.Sid)) {
-                our_user_sid = user;
-            } else {
-                free(user);
-            }
-        } else if (process != NULL) {
-            CloseHandle(process);
-        }
-    }
-
-    return our_user_sid;
-}
-
-static void destroyEvents(OVERLAPPED** events, int nr_of_events) {
-    int i;
-
-    for (i = 0; i < nr_of_events; ++i) {
-        if (events[i]->hEvent != NULL) {
-            CloseHandle(events[i]->hEvent);
-        }
-
-        ZeroMemory(events[i], sizeof(OVERLAPPED));
-    }
-}
-
-static jboolean initEvents(OVERLAPPED** events, int nr_of_events) {
-    int i;
-
-    destroyEvents(events, nr_of_events);
-
-    for (i = 0; i < nr_of_events; ++i) {
-        ZeroMemory(events[i], sizeof(OVERLAPPED));
-        events[i]->hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-
-        if (events[i]->hEvent == NULL) {
-            destroyEvents(events, i - 1);
-            return JNI_FALSE;
-        }
-    }
-
-    return JNI_TRUE;
-}
-
-static void fileSocketTransport_CloseImpl() {
-    SetEvent(cancel_event.hEvent);
-
-    if (handle != INVALID_HANDLE_VALUE) {
-        CloseHandle(handle);
-        handle = INVALID_HANDLE_VALUE;
-    }
-}
-
-static void fileSocketTransport_AcceptImpl() {
-    // Allow access to admins and user, but not others.
-    LPSECURITY_ATTRIBUTES sec = NULL;
-    char sec_spec[1024];
-    static char const* user_id = NULL;
-    jboolean connected = JNI_FALSE;
-
-    if (!initEvents(events, sizeof(events) / sizeof(events[0]))) {
-        return;
-    }
-
-    if (user_id == NULL) {
-        PTOKEN_USER sid = GetUserSid();
-        LPTSTR result;
-        if (!sid) {
-            log_error("Could not get the user sid");
-            return;
-        } else if (!ConvertSidToStringSid(sid->User.Sid, &result)) {
-            log_error("Could not convert the user sid to a string");
-            return;
-        } else {
-            user_id = (char const*) result;
-        }
-    }
-
-    snprintf(sec_spec, sizeof(sec_spec),
-        "D:"
-        "(A;OICI;FA;;;%s)"
-        "(A;OICI;FA;;;BA)", user_id);
-    sec = (LPSECURITY_ATTRIBUTES) malloc(sizeof(SECURITY_ATTRIBUTES));
-    sec->nLength = sizeof(SECURITY_ATTRIBUTES);
-    sec->bInheritHandle = FALSE;
-
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptor(sec_spec, SDDL_REVISION_1, &(sec->lpSecurityDescriptor), NULL)) {
-        log_error("Could not convert security descriptor %s", sec_spec);
-        free(sec);
-        return;
-    }
-
-    handle = CreateNamedPipe(path, FILE_FLAG_OVERLAPPED | PIPE_ACCESS_DUPLEX, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
-                             1, 4096, 4096, NMPWAIT_USE_DEFAULT_WAIT, sec);
-    free(sec);
-
-    if (handle == INVALID_HANDLE_VALUE) {
-        log_error("Could not create pipe, error code %lld", (long long) GetLastError());
-        return;
-    }
-
-    if (!initEvents(events, sizeof(events) / sizeof(events[0]))) {
-        CloseHandle(handle);
-        handle = INVALID_HANDLE_VALUE;
-    }
-
-    ResetEvent(accept_event.hEvent);
-
-    while (!connected) {
-        DWORD lastError;
-
-        connected = ConnectNamedPipe(handle, &accept_event);
-        lastError = GetLastError();
-
-        if (!connected && (lastError == ERROR_PIPE_CONNECTED)) {
-            connected = TRUE;
-        }
-
-        if (!connected) {
-            if (lastError == ERROR_IO_PENDING) {
-                // The ConnectNamedPipe is still in progress. wait until signaled...
-                // we wait for two different signals, not both signals must be 1, wait until signal is seen
-                HANDLE hOverlapped[2] = { accept_event.hEvent, cancel_event.hEvent };
-                DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
-                switch (waitResult) {
-                case WAIT_OBJECT_0:
-                    // client has connected
-                    if (HasOverlappedIoCompleted(&accept_event)) {
-                        connected = TRUE;
-                    } else {
-                        CancelIo(handle);
-                    }
-                    break;
-                case WAIT_OBJECT_0 + 1:
-                    // this FileSocket was closed. Must leave accept with a pending exception
-                    CancelIo(handle);
-                    CloseHandle(handle);
-                    handle = INVALID_HANDLE_VALUE;
-                    log_error("Accept error : Server endpoint closed.");
-                    return;
-                default:
-                    // should not happen
-                    CancelIo(handle);
-                    CloseHandle(handle);
-                    handle = INVALID_HANDLE_VALUE;
-                    log_error("Accept error : Unknown.");
-                    return;
-                }
-            } else {
-                // we definitely cannot get a new client connection (for example pipe was closed)
-                CloseHandle(handle);
-                handle = INVALID_HANDLE_VALUE;
-                log_error("Accept error : %d.", (int) lastError);
-                return;
-            }
-        }
-    }
-}
-
-static int fileSocketTransport_ReadImpl(char* buffer, int size) {
-    DWORD nread = 0;
-
-    ResetEvent(read_event.hEvent);
-
-    if (ReadFile(handle, (LPVOID) buffer, (DWORD) size, NULL, &read_event)) {
-        // directly returned synchronously. get actual number of read bytes.
-        if (!GetOverlappedResult(handle, &read_event, &nread, FALSE)) {
-            DWORD lastError = GetLastError();
-            nread = 0;
-            log_error("Read failed: %d", (int) lastError);
-        }
-    } else {
-        DWORD lastError = GetLastError();
-        switch (lastError) {
-        case ERROR_IO_PENDING: {
-            HANDLE hOverlapped[2] = { read_event.hEvent, cancel_event.hEvent };
-            DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
-
-            switch (waitResult) {
-            case WAIT_OBJECT_0:
-                // signalled on the overlapped event handle, check the result
-                if (!GetOverlappedResult(handle, &read_event, &nread, FALSE)) {
-                    lastError = GetLastError();
-                    nread = 0;
-                    log_error("Read failed: %d", (int) lastError);
-                }
-                break;
-            case WAIT_TIMEOUT:
-            case WAIT_OBJECT_0 + 1:
-                CancelIo(handle);
-                nread = 0;
-                break;
-            default:
-                lastError = GetLastError();
-                CancelIo(handle);
-                nread = 0;
-                log_error("Read failed: %d", (int) lastError);
-                break;
-            }
-            break;
-        }
-        default:
-            nread = 0;
-            log_error("Read failed: %d", (int) lastError);
-        }
-    }
-
-    return (int) nread;
-}
-
-static int fileSocketTransport_WriteImpl(char* buffer, int size) {
-    DWORD nwrite = 0;
-
-    ResetEvent(write_event.hEvent);
-
-    if (WriteFile(handle, buffer, (DWORD) size, NULL, &write_event)) // overlapped
-    {
-        // get actual number of written bytes
-        if (!GetOverlappedResult(handle, &write_event, &nwrite, FALSE)) {
-            log_error("Write failed: %d", (int) GetLastError());
-            return 0;
-        }
-    } else {
-        // wait for IO
-        if (GetLastError() == ERROR_IO_PENDING) {
-            HANDLE hOverlapped[2] = { write_event.hEvent, cancel_event.hEvent };
-            DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
-
-            switch (waitResult) {
-            case WAIT_OBJECT_0:
-                // signalled on the overlapped event handle, check the result
-                if (!GetOverlappedResult(handle, &write_event, &nwrite, FALSE)) {
-                    log_error("Write failed: %d", (int) GetLastError());
-                    return 0;
-                }
-                break;
-            case WAIT_TIMEOUT:
-            case WAIT_OBJECT_0 + 1:
-                CancelIo(handle);
-                log_error("Write failed: %d", (int) waitResult);
-                return 0;
-            default:
-                log_error("Write_failed: %d", (int) waitResult);
-                return 0;
-            }
-        }
-    }
-
-    return (int) nwrite;
-}
-
-#endif
-
 
 static jdwpTransportError JNICALL fileSocketTransport_GetCapabilities(jdwpTransportEnv* env, JDWPTransportCapabilities *capabilities_ptr) {
     JDWPTransportCapabilities result;
@@ -364,9 +76,8 @@ static jdwpTransportError JNICALL fileSocketTransport_SetTransportConfiguration(
 }
 
 static jdwpTransportError JNICALL fileSocketTransport_Close(jdwpTransportEnv* env) {
-    if (handle != INVALID_FILESOCKET_HANDLE) {
+    if (!fileSocketTransport_HasValidHandle()) {
         fileSocketTransport_CloseImpl();
-        handle = INVALID_FILESOCKET_HANDLE;
     }
 
     fake_open = JNI_FALSE;
@@ -398,7 +109,7 @@ static jdwpTransportError JNICALL fileSocketTransport_StopListening(jdwpTranspor
 }
 
 static jboolean JNICALL fileSocketTransport_IsOpen(jdwpTransportEnv* env) {
-    return fake_open || (handle != INVALID_FILESOCKET_HANDLE);
+    return fake_open || fileSocketTransport_HasValidHandle();
 }
 
 static int fileSocketTransport_ReadFully(char* buf, int len) {
@@ -438,9 +149,9 @@ static int fileSocketTransport_WriteFully(char* buf, int len) {
 }
 
 static jdwpTransportError JNICALL fileSocketTransport_Accept(jdwpTransportEnv* env, jlong accept_timeout, jlong handshake_timeout) {
-    fileSocketTransport_AcceptImpl();
+    fileSocketTransport_AcceptImpl(path);
 
-    if (handle == INVALID_FILESOCKET_HANDLE) {
+    if (!fileSocketTransport_HasValidHandle()) {
         fake_open = JNI_TRUE;
     } else {
 #if USE_HANDSHAKE
@@ -460,7 +171,7 @@ static jdwpTransportError JNICALL fileSocketTransport_Accept(jdwpTransportEnv* e
 static jdwpTransportError JNICALL fileSocketTransport_ReadPacket(jdwpTransportEnv* env, jdwpPacket *packet) {
     jint length, data_len, n;
 
-    if (handle == INVALID_FILESOCKET_HANDLE) {
+    if (!fileSocketTransport_HasValidHandle()) {
         fake_open = JNI_FALSE;
         return JDWPTRANSPORT_ERROR_IO_ERROR;
     } else if (fake_open) {
@@ -550,7 +261,7 @@ static jdwpTransportError JNICALL fileSocketTransport_ReadPacket(jdwpTransportEn
 static jdwpTransportError JNICALL fileSocketTransport_WritePacket(jdwpTransportEnv* env, const jdwpPacket* packet) {
     jint len, data_len, id, n;
 
-    if (handle == INVALID_FILESOCKET_HANDLE) {
+    if (!fileSocketTransport_HasValidHandle()) {
         fake_open = JNI_FALSE;
         return JDWPTRANSPORT_ERROR_IO_ERROR;
     } else if (fake_open) {
