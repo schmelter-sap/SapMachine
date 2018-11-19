@@ -41,7 +41,7 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h> 
+#include <limits.h>
 #include <poll.h>
 #include <pthread.h>
 #include <pwd.h>
@@ -113,17 +113,17 @@ void fileSocketTransport_AcceptImpl(char const* name) {
         strncpy(addr.sun_path, name, sizeof(addr.sun_path) - 1);
 
         server_handle = socket(PF_UNIX, SOCK_STREAM, 0);
-        
+
         if (server_handle == INVALID_HANDLE_VALUE) {
             return;
         }
-        
+
         if ((access(name, F_OK )) != -1 && (unlink(name) != 0)) {
             log_error("Could not remove %s to create new file socket", name);
             closeServerHandle();
             return;
         }
-        
+
         if (bind(server_handle, (struct sockaddr*) &addr, addr_size) == -1) {
             log_error("Could not bind file socket %s: %s", name, strerror(errno));
             closeServerHandle();
@@ -137,7 +137,7 @@ void fileSocketTransport_AcceptImpl(char const* name) {
             closeServerHandle();
             return;
         }
-        
+
         if (chmod(name, (S_IREAD|S_IWRITE) &  ~(S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) == -1) {
             log_error("Chmod on %s failed: %s", strerror(errno));
             unlink(name);
@@ -148,7 +148,7 @@ void fileSocketTransport_AcceptImpl(char const* name) {
 
   memset((void *) &addr, 0, len);
 
-  do {        
+  do {
     handle = accept(server_handle, (struct sockaddr *) &addr, &len);
   } while (server_handle == INVALID_HANDLE_VALUE && errno == EINTR);
 
@@ -159,20 +159,20 @@ void fileSocketTransport_AcceptImpl(char const* name) {
 
 int fileSocketTransport_ReadImpl(char* buffer, int size) {
     int result = read(handle, buffer, size);
-    
+
     if (result <= 0) {
         log_error("Read failed with result %d: %s", result, strerror(errno));
     }
-    
+
     return result;
 }
 
 int fileSocketTransport_WriteImpl(char* buffer, int size) {
     int result = write(handle, buffer, size);
-    
+
     if (result <= 0) {
         log_error("Read failed with result %d: %s", result, strerror(errno));
     }
-    
+
     return result;
 }
