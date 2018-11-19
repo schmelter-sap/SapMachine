@@ -1103,5 +1103,5 @@ void DebugOnDemandStartDCmd::execute(DCmdSource source, TRAPS) {
       msg = "Started debugug on demand.";
   }
 
-  output()->print_cr(msg);
+  output()->print_cr("%s", msg);
 }

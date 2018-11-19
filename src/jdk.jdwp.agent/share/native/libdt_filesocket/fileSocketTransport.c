@@ -33,6 +33,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #else
+#include <arpa/inet.h>
 #endif
 
 #define MAX_FILE_SOCKET_PATH_LEN 4096

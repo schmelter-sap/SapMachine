@@ -22,19 +22,3 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-
-#include "jni.h"
-
-#ifndef FILE_SOCKET_TRANSPORT_H
-#define FILE_SOCKET_TRANSPORT_H
-
-#define log_error fileSocketTransport_logError
-
-void log_error(char const* format, ...);
-jboolean fileSocketTransport_HasValidHandle();
-void fileSocketTransport_CloseImpl();
-void fileSocketTransport_AcceptImpl(char const* name);
-int fileSocketTransport_ReadImpl(char* buffer, int size);
-int fileSocketTransport_WriteImpl(char* buffer, int size);
-
-#endif
