@@ -85,6 +85,8 @@ void fileSocketTransport_CloseImpl() {
     if (handle != INVALID_HANDLE_VALUE) {
         int rv = -1;
 
+        shutdown(handle, SHUT_RDWR);
+
         do {
            rv = close(handle);
         } while (rv == -1 && errno == EINTR);
