@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "jni.h"
-#include "../include/jdwpTransport.h"
+#include "jdwpTransport.h"
 #include "fileSocketTransport.h"
 
 #ifdef _WIN32
@@ -38,7 +38,7 @@
 
 #define MAX_FILE_SOCKET_PATH_LEN 4096
 #define MAX_DATA_SIZE 1000
-#define USE_HANDSHAKE 1
+#define USE_HANDSHAKE 0
 #define HANDSHAKE "JDWP-Handshake"
 
 static jboolean fake_open = JNI_FALSE;
@@ -77,7 +77,7 @@ static jdwpTransportError JNICALL fileSocketTransport_SetTransportConfiguration(
 }
 
 static jdwpTransportError JNICALL fileSocketTransport_Close(jdwpTransportEnv* env) {
-    if (!fileSocketTransport_HasValidHandle()) {
+    if (fileSocketTransport_HasValidHandle()) {
         fileSocketTransport_CloseImpl();
     }
 

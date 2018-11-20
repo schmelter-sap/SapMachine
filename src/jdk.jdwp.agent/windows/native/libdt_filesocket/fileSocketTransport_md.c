@@ -32,7 +32,7 @@
 #include <process.h>
 #include <sddl.h>
 
-static HANDLE handle = INVALID_HANDLE_VALUE;
+static volatile HANDLE handle = INVALID_HANDLE_VALUE;
 static PTOKEN_USER our_user_sid = (PTOKEN_USER) &our_user_sid;
 static OVERLAPPED read_event;
 static OVERLAPPED write_event;
@@ -106,10 +106,13 @@ jboolean fileSocketTransport_HasValidHandle() {
 }
 
 void fileSocketTransport_CloseImpl() {
+    HANDLE tmp = handle;
     SetEvent(cancel_event.hEvent);
 
-    if (handle != INVALID_HANDLE_VALUE) {
-        CloseHandle(handle);
+    if (tmp != INVALID_HANDLE_VALUE) {
+        CancelIo(tmp);
+        DisconnectNamedPipe(tmp);
+        CloseHandle(tmp);
         handle = INVALID_HANDLE_VALUE;
     }
 }
@@ -120,10 +123,14 @@ void fileSocketTransport_AcceptImpl(char const* name) {
     char sec_spec[1024];
     static char const* user_id = NULL;
     jboolean connected = JNI_FALSE;
+    static jboolean event_initialized = JNI_FALSE;
 
-    if (!initEvents(events, sizeof(events) / sizeof(events[0]))) {
+    if (!event_initialized && !initEvents(events, sizeof(events) / sizeof(events[0]))) {
+        log_error("Could not initialize events.");
         return;
     }
+
+    event_initialized = TRUE;
 
     if (user_id == NULL) {
         PTOKEN_USER sid = GetUserSid();
@@ -162,12 +169,8 @@ void fileSocketTransport_AcceptImpl(char const* name) {
         return;
     }
 
-    if (!initEvents(events, sizeof(events) / sizeof(events[0]))) {
-        CloseHandle(handle);
-        handle = INVALID_HANDLE_VALUE;
-    }
-
     ResetEvent(accept_event.hEvent);
+    ResetEvent(cancel_event.hEvent);
 
     while (!connected) {
         DWORD lastError;
@@ -194,17 +197,14 @@ void fileSocketTransport_AcceptImpl(char const* name) {
                         CancelIo(handle);
                     }
                 } else {
-                    CancelIo(handle);
-                    CloseHandle(handle);
-                    handle = INVALID_HANDLE_VALUE;
-                    log_error("Accept error : %d", waitResult);
+                    log_error("Accept error (wait): %d", waitResult);
+                    fileSocketTransport_CloseImpl();
                     return;
                 }
             } else {
                 // we definitely cannot get a new client connection (for example pipe was closed)
-                CloseHandle(handle);
-                handle = INVALID_HANDLE_VALUE;
-                log_error("Accept error : %d.", (int) lastError);
+                log_error("Accept error (connect) : %d.", (int) lastError);
+                fileSocketTransport_CloseImpl();
                 return;
             }
         }
