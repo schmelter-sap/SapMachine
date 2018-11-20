@@ -185,28 +185,19 @@ void fileSocketTransport_AcceptImpl(char const* name) {
                 // we wait for two different signals, not both signals must be 1, wait until signal is seen
                 HANDLE hOverlapped[2] = { accept_event.hEvent, cancel_event.hEvent };
                 DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
-                switch (waitResult) {
-                case WAIT_OBJECT_0:
+
+                if (waitResult == WAIT_OBJECT_0) {
                     // client has connected
                     if (HasOverlappedIoCompleted(&accept_event)) {
                         connected = TRUE;
                     } else {
                         CancelIo(handle);
                     }
-                    break;
-                case WAIT_OBJECT_0 + 1:
-                    // this FileSocket was closed. Must leave accept with a pending exception
+                } else {
                     CancelIo(handle);
                     CloseHandle(handle);
                     handle = INVALID_HANDLE_VALUE;
-                    log_error("Accept error : Server endpoint closed.");
-                    return;
-                default:
-                    // should not happen
-                    CancelIo(handle);
-                    CloseHandle(handle);
-                    handle = INVALID_HANDLE_VALUE;
-                    log_error("Accept error : Unknown.");
+                    log_error("Accept error : %d", waitResult);
                     return;
                 }
             } else {
@@ -252,6 +243,7 @@ int fileSocketTransport_ReadImpl(char* buffer, int size) {
             case WAIT_OBJECT_0 + 1:
                 CancelIo(handle);
                 nread = 0;
+                log_error("Read failed: %d", waitResult);
                 break;
             default:
                 lastError = GetLastError();
