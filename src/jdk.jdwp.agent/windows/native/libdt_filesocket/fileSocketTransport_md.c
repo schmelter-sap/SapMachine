@@ -216,47 +216,24 @@ int fileSocketTransport_ReadImpl(char* buffer, int size) {
 
     ResetEvent(read_event.hEvent);
 
-    if (ReadFile(handle, (LPVOID) buffer, (DWORD) size, NULL, &read_event)) {
-        // directly returned synchronously. get actual number of read bytes.
-        if (!GetOverlappedResult(handle, &read_event, &nread, FALSE)) {
-            DWORD lastError = GetLastError();
-            nread = 0;
-            log_error("Read failed: %d", (int) lastError);
-        }
-    } else {
-        DWORD lastError = GetLastError();
-        switch (lastError) {
-        case ERROR_IO_PENDING: {
+    if (!ReadFile(handle, (LPVOID) buffer, (DWORD) size, &nread, &read_event)) {
+        if (GetLastError() == ERROR_IO_PENDING) {
             HANDLE hOverlapped[2] = { read_event.hEvent, cancel_event.hEvent };
             DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
 
-            switch (waitResult) {
-            case WAIT_OBJECT_0:
-                // signalled on the overlapped event handle, check the result
+            if (waitResult == WAIT_OBJECT_0) {
                 if (!GetOverlappedResult(handle, &read_event, &nread, FALSE)) {
-                    lastError = GetLastError();
-                    nread = 0;
-                    log_error("Read failed: %d", (int) lastError);
+                    log_error("Read failed (overlap): %d", (int) GetLastError());
+                    return 0;
                 }
-                break;
-            case WAIT_TIMEOUT:
-            case WAIT_OBJECT_0 + 1:
+            } else {
                 CancelIo(handle);
-                nread = 0;
-                log_error("Read failed: %d", waitResult);
-                break;
-            default:
-                lastError = GetLastError();
-                CancelIo(handle);
-                nread = 0;
-                log_error("Read failed: %d", (int) lastError);
-                break;
+                log_error("Read failed (wait): %d", (int) waitResult);
+                return 0;
             }
-            break;
-        }
-        default:
-            nread = 0;
-            log_error("Read failed: %d", (int) lastError);
+        } else {
+            log_error("Read failed: %d", (int) GetLastError());
+            return 0;
         }
     }
 
@@ -268,36 +245,24 @@ int fileSocketTransport_WriteImpl(char* buffer, int size) {
 
     ResetEvent(write_event.hEvent);
 
-    if (WriteFile(handle, buffer, (DWORD) size, NULL, &write_event)) // overlapped
-    {
-        // get actual number of written bytes
-        if (!GetOverlappedResult(handle, &write_event, &nwrite, FALSE)) {
-            log_error("Write failed: %d", (int) GetLastError());
-            return 0;
-        }
-    } else {
-        // wait for IO
+    if (!WriteFile(handle, buffer, (DWORD) size, &nwrite, &write_event)) {
         if (GetLastError() == ERROR_IO_PENDING) {
             HANDLE hOverlapped[2] = { write_event.hEvent, cancel_event.hEvent };
             DWORD waitResult = WaitForMultipleObjects(2, hOverlapped, FALSE, INFINITE);
 
-            switch (waitResult) {
-            case WAIT_OBJECT_0:
-                // signalled on the overlapped event handle, check the result
+            if (waitResult == WAIT_OBJECT_0) {
                 if (!GetOverlappedResult(handle, &write_event, &nwrite, FALSE)) {
-                    log_error("Write failed: %d", (int) GetLastError());
+                    log_error("Write failed (overlap): %d", (int) GetLastError());
                     return 0;
                 }
-                break;
-            case WAIT_TIMEOUT:
-            case WAIT_OBJECT_0 + 1:
+            } else {
                 CancelIo(handle);
-                log_error("Write failed: %d", (int) waitResult);
-                return 0;
-            default:
-                log_error("Write_failed: %d", (int) waitResult);
+                log_error("Write_failed (wait): %d", (int) waitResult);
                 return 0;
             }
+        } else {
+            log_error("Write failed: %d", (int) GetLastError());
+            return 0;
         }
     }
 
