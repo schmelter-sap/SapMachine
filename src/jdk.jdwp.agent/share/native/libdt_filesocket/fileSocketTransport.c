@@ -261,6 +261,8 @@ static jdwpTransportError JNICALL fileSocketTransport_ReadPacket(jdwpTransportEn
 
 static jdwpTransportError JNICALL fileSocketTransport_WritePacket(jdwpTransportEnv* env, const jdwpPacket* packet) {
     jint len, data_len, id, n;
+    char header[JDWP_HEADER_SIZE + MAX_DATA_SIZE];
+    jbyte *data;
 
     if (!fileSocketTransport_HasValidHandle()) {
         fake_open = JNI_FALSE;
@@ -270,9 +272,6 @@ static jdwpTransportError JNICALL fileSocketTransport_WritePacket(jdwpTransportE
     }
 
     /* Taken mostly from sockectTransport.c */
-    char header[JDWP_HEADER_SIZE + MAX_DATA_SIZE];
-    jbyte *data;
-
     if (packet == NULL) {
         log_error("Packet is null when writing");
         return JDWPTRANSPORT_ERROR_ILLEGAL_ARGUMENT;
