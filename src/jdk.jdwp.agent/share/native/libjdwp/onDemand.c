@@ -65,13 +65,14 @@ jboolean onDemand_isEnabled() {
 }
 
 JNIEXPORT char const* JNICALL onDemand_startDebugging(JNIEnv* env, jthread thread) {
+    char const* msg = NULL;
+
     if (!initCalled) {
         return "Not yet initialized. Try later again.";
     }
 
-    char const* msg = NULL;
-
     debugMonitorEnter(onDemandMonitor);
+
     if (!enabled) {
         msg = "Debugging on demand was not enabled via the ondemand option to the jdwp agent.";
     } else if (started) {
@@ -79,6 +80,7 @@ JNIEXPORT char const* JNICALL onDemand_startDebugging(JNIEnv* env, jthread threa
     } else {
         started = JNI_TRUE;
     }
+
     debugMonitorExit(onDemandMonitor);
 
     if (msg == NULL) {
