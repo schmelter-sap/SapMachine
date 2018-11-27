@@ -38,7 +38,7 @@
 
 #define MAX_FILE_SOCKET_PATH_LEN 4096
 #define MAX_DATA_SIZE 1000
-#define USE_HANDSHAKE 0
+#define USE_HANDSHAKE 1
 #define HANDSHAKE "JDWP-Handshake"
 
 static jboolean fake_open = JNI_FALSE;
