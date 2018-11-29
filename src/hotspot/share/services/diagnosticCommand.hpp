@@ -867,17 +867,17 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
-class DebugOnDemandStartDCmd : public DCmdWithParser {
+class DebugOnCmddStartDCmd : public DCmdWithParser {
 public:
-  DebugOnDemandStartDCmd(outputStream* output, bool heap);
+    DebugOnCmddStartDCmd(outputStream* output, bool heap);
   static const char* name() {
-    return "DoD.start";
+    return "VM.start_java_debugging";
   }
   static const char* description() {
-    return "Starts debugging the VM.";
+    return "Starts up the Java debugging if enabled in the agentlib via the oncmd=y option.";
   }
   static const char* impact() {
-    return "High: Switches the VM into debug mode.";
+    return "High: Switches the VM into Java debug mode.";
   }
   static const JavaPermission permission() {
     JavaPermission p = { "java.lang.management.ManagementPermission", "monitor", NULL };

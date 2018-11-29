@@ -37,7 +37,6 @@
 #include "debugLoop.h"
 #include "bag.h"
 #include "invoker.h"
-#include "onDemand.h"
 #include "sys.h"
 
 /* How the options get to OnLoad: */
@@ -82,6 +81,9 @@ static char *logfile = NULL;                /* Name of logfile (if logging) */
 static unsigned logflags = 0;               /* Log flags */
 
 static char *names;                         /* strings derived from OnLoad options */
+
+static jboolean allowStartViaCmd = JNI_FALSE;  /* if true we allow the debugging to be started via a jcmd */
+static jboolean startedViaCmd = JNI_FALSE;     /* if false, we have no yet started debugging via a jcmd */
 
 /*
  * Elements of the transports bag
@@ -267,8 +269,6 @@ DEF_Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
         /* Do not let VM get a fatal error, we don't want a core dump here. */
         forceExit(1); /* Kill entire process, no core dump wanted */
     }
-
-    onDemand_init();
 
     /* Parse input options */
     if (!parseOptions(options)) {
@@ -608,14 +608,6 @@ debugInit_isInitComplete(void)
 }
 
 /*
- * Called by debugging on demand to startthe debugging backend.
- */
-void debugInit_initForOnDemand(JNIEnv *env, jthread thread) {
-    initialize(env, thread, EI_VM_INIT);
-    vmInitialized = JNI_TRUE;
-}
-
-/*
  * Wait for all initialization to complete.
  */
 void
@@ -881,6 +873,7 @@ printUsage(void)
  "launch=<command line>            run debugger on event             none\n"
  "onthrow=<exception name>         debug on throw                    none\n"
  "onuncaught=y|n                   debug on any uncaught?            n\n"
+ "oncmd=y|n                        debug on jcmd?                    n\n"
  "timeout=<timeout value>          for listen/attach in milliseconds n\n"
  "mutf8=y|n                        output modified utf-8             n\n"
  "quiet=y|n                        control over terminal messages    n\n"));
@@ -1021,7 +1014,7 @@ parseOptions(char *options)
     int length;
     char *str;
     char *errmsg;
-    jboolean onDemand = JNI_FALSE;
+    jboolean onCmd = JNI_FALSE;
 
     /* Set defaults */
     gdata->assertOn     = DEFAULT_ASSERT_ON;
@@ -1241,8 +1234,8 @@ parseOptions(char *options)
             if ( !get_boolean(&str, &useStandardAlloc) ) {
                 goto syntax_error;
             }
-        } else if (strcmp(buf, "ondemand") == 0) {
-            if (!get_boolean(&str, &onDemand)) {
+        } else if (strcmp(buf, "oncmd") == 0) {
+            if (!get_boolean(&str, &onCmd)) {
                 goto syntax_error;
             }
         } else {
@@ -1295,17 +1288,18 @@ parseOptions(char *options)
         }
     }
 
-    if (onDemand) {
+    if (onCmd) {
         if (launchOnInit != NULL) {
-            errmsg = "Cannot combine ondemand and launch suboptions";
+            errmsg = "Cannot combine oncmd and launch suboptions";
             goto bad_option_with_errmsg;
         }
         if (!isServer) {
-            errmsg = "Cannot use ondemand with server=n";
+            errmsg = "Cannot use oncmd with server=n";
             goto bad_option_with_errmsg;
         }
+        suspendOnInit = JNI_FALSE;
         initOnStartup = JNI_FALSE;
-        onDemand_enable();
+        allowStartViaCmd = JNI_TRUE;
     }
 
     return JNI_TRUE;
@@ -1375,4 +1369,27 @@ debugInit_exit(jvmtiError error, const char *msg)
 
     // Last chance to die, this kills the entire process.
     forceExit(EXIT_JVMTI_ERROR);
+}
+
+/* When debugging is started via jcmd. */
+JNIEXPORT char const* JNICALL debugInit_startDebuggingViaCommand(JNIEnv* env, jthread thread) {
+    char const* msg = NULL;
+
+    if (!vmInitialized) {
+        return "Not yet initialized. Try later again.";
+    }
+
+    if (!allowStartViaCmd) {
+        msg = "Starting debugging via jcmd was not enabled via the ondemand option to the jdwp agent.";
+    } else if (startedViaCmd) {
+        msg = "Debugging was already started.";
+    } else {
+        startedViaCmd = JNI_TRUE;
+    }
+
+    if (msg == NULL) {
+        initialize(env, thread, EI_VM_INIT);
+    }
+
+    return msg;
 }
