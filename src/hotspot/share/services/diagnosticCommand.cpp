@@ -1061,17 +1061,21 @@ int TouchedMethodsDCmd::num_arguments() {
   return 0;
 }
 
-extern "C" typedef char const* (JNICALL *debugInit_startDebuggingViaCommandPtr)(JNIEnv* env, jthread thread);
+extern "C" typedef char const* (JNICALL *debugInit_startDebuggingViaCommandPtr)(JNIEnv* env, jthread thread, char const** transport_name,
+                                                                                char const** address, jboolean* first_start);
 static debugInit_startDebuggingViaCommandPtr dvc_start_ptr = NULL;
 
 DebugOnCmddStartDCmd::DebugOnCmddStartDCmd(outputStream* output, bool heap) : DCmdWithParser(output, heap) {
 }
 
 void DebugOnCmddStartDCmd::execute(DCmdSource source, TRAPS) {
+  char const* transport = NULL;
+  char const* addr = NULL;
+  jboolean is_first_start = JNI_FALSE;
   JavaThread* thread = (JavaThread*) THREAD;
   jthread jt = JNIHandles::make_local(thread->threadObj());
   ThreadToNativeFromVM ttn(thread);
-  const char *msg = "Could not find jdwp agent.";
+  const char *error = "Could not find jdwp agent.";
 
   if (!dvc_start_ptr) {
       for (AgentLibrary* agent = Arguments::agents(); agent != NULL; agent = agent->next()) {
@@ -1083,12 +1087,14 @@ void DebugOnCmddStartDCmd::execute(DCmdSource source, TRAPS) {
   }
 
   if (dvc_start_ptr) {
-    msg = dvc_start_ptr(thread->jni_environment(), jt);
-
-    if (msg == NULL) {
-      msg = "Started debugging.";
-    }
+    error = dvc_start_ptr(thread->jni_environment(), jt, &transport, &addr, &is_first_start);
   }
 
-  output()->print_cr("%s", msg);
+  if (error != NULL) {
+      output()->print_cr("Debugging has not been started: %s", error);
+  } else {
+      output()->print_cr("Debugging has been started %s.", is_first_start ? "initially" : "already");
+      output()->print_cr("Transport : %s", transport ? transport : "#unknown");
+      output()->print_cr("Address : %s", addr ? addr : "#unknown");
+  }
 }

@@ -873,7 +873,7 @@ printUsage(void)
  "launch=<command line>            run debugger on event             none\n"
  "onthrow=<exception name>         debug on throw                    none\n"
  "onuncaught=y|n                   debug on any uncaught?            n\n"
- "oncmd=y|n                        debug on jcmd?                    n\n"
+ "oncmd=y|n                        debug triggered by jcmd?          n\n"
  "timeout=<timeout value>          for listen/attach in milliseconds n\n"
  "mutf8=y|n                        output modified utf-8             n\n"
  "quiet=y|n                        control over terminal messages    n\n"));
@@ -1371,25 +1371,46 @@ debugInit_exit(jvmtiError error, const char *msg)
     forceExit(EXIT_JVMTI_ERROR);
 }
 
+static jboolean getFirstTransport(void *item, void *arg)
+{
+    TransportSpec** store = arg;
+    *store = item;
+
+    return JNI_FALSE; /* Want the first */
+}
+
 /* When debugging is started via jcmd. */
-JNIEXPORT char const* JNICALL debugInit_startDebuggingViaCommand(JNIEnv* env, jthread thread) {
-    char const* msg = NULL;
+JNIEXPORT char const* JNICALL debugInit_startDebuggingViaCommand(JNIEnv* env, jthread thread, char const** transport_name,  
+                                                                char const** address, jboolean* first_start) {
+    char const* error = NULL;
+    jboolean is_first_start = JNI_FALSE;
 
     if (!vmInitialized) {
         return "Not yet initialized. Try later again.";
     }
 
     if (!allowStartViaCmd) {
-        msg = "Starting debugging via jcmd was not enabled via the ondemand option to the jdwp agent.";
-    } else if (startedViaCmd) {
-        msg = "Debugging was already started.";
-    } else {
+        error = "Starting debugging via jcmd was not enabled via the ondemand option to the jdwp agent.";
+    } else if (!startedViaCmd) {
         startedViaCmd = JNI_TRUE;
-    }
-
-    if (msg == NULL) {
         initialize(env, thread, EI_VM_INIT);
+        is_first_start = JNI_TRUE;
     }
 
-    return msg;
+    if (error == NULL) {
+        TransportSpec* spec = NULL;
+
+        bagEnumerateOver(transports, getFirstTransport, &spec);
+
+        if ((spec != NULL) && (transport_name != NULL) && (address != NULL)) {
+            *transport_name = spec->name;
+            *address = spec->address;
+        }
+
+        if (first_start != NULL) {
+            *first_start = is_first_start;
+        }
+    }
+
+    return error;
 }
