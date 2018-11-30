@@ -1294,7 +1294,7 @@ parseOptions(char *options)
             goto bad_option_with_errmsg;
         }
         if (!isServer) {
-            errmsg = "Cannot use oncmd with server=n";
+            errmsg = "Can only use oncmd with server=y";
             goto bad_option_with_errmsg;
         }
         suspendOnInit = JNI_FALSE;
