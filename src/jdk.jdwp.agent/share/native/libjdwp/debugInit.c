@@ -746,7 +746,7 @@ initialize(JNIEnv *env, jthread thread, EventIndex triggering_ei)
     if (triggering_ei == EI_VM_INIT) {
         LOG_MISC(("triggering_ei == EI_VM_INIT"));
         eventHelper_reportVMInit(env, currentSessionID, thread, suspendPolicy);
-    } else {
+    } else if (triggering_ei >= EI_min && triggering_ei <= EI_max) {
         /*
          * TO DO: Kludgy way of getting the triggering event to the
          * just-attached debugger. It would be nice to make this a little
@@ -1393,7 +1393,7 @@ JNIEXPORT char const* JNICALL debugInit_startDebuggingViaCommand(JNIEnv* env, jt
         error = "Starting debugging via jcmd was not enabled via the ondemand option to the jdwp agent.";
     } else if (!startedViaCmd) {
         startedViaCmd = JNI_TRUE;
-        initialize(env, thread, EI_VM_INIT);
+        initialize(env, thread, (EventIndex) (EI_max + 1));
         is_first_start = JNI_TRUE;
     }
 
