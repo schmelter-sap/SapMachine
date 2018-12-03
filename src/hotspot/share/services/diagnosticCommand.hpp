@@ -867,6 +867,7 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+#if INCLUDE_JVMTI
 class DebugOnCmddStartDCmd : public DCmdWithParser {
 public:
     DebugOnCmddStartDCmd(outputStream* output, bool heap);
@@ -886,5 +887,6 @@ public:
   static int num_arguments() { return 0; }
   virtual void execute(DCmdSource source, TRAPS);
 };
+#endif // INCLUDE_JVMTI
 
 #endif // SHARE_VM_SERVICES_DIAGNOSTICCOMMAND_HPP

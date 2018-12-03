@@ -127,7 +127,7 @@ void DCmdRegistrant::register_dcmds(){
   // Debug on cmd (only make sense with JVMTI since the agentlib needs it).
 #if INCLUDE_JVMTI
   DCmdFactory::register_DCmdFactory(new DCmdFactoryImpl<DebugOnCmddStartDCmd>(full_export, true, false));
-#endif
+#endif // INCLUDE_JVMTI
 
 }
 
@@ -298,6 +298,7 @@ void JVMTIDataDumpDCmd::execute(DCmdSource source, TRAPS) {
 }
 
 #if INCLUDE_SERVICES
+#if INCLUDE_JVMTI
 JVMTIAgentLoadDCmd::JVMTIAgentLoadDCmd(outputStream* output, bool heap) :
                                        DCmdWithParser(output, heap),
   _libpath("library path", "Absolute path of the JVMTI agent to load.",
@@ -357,6 +358,7 @@ int JVMTIAgentLoadDCmd::num_arguments() {
     return 0;
   }
 }
+#endif // INCLUDE_JVMTI
 #endif // INCLUDE_SERVICES
 
 void PrintSystemPropertiesDCmd::execute(DCmdSource source, TRAPS) {
@@ -1061,6 +1063,7 @@ int TouchedMethodsDCmd::num_arguments() {
   return 0;
 }
 
+#if INCLUDE_JVMTI
 extern "C" typedef char const* (JNICALL *debugInit_startDebuggingViaCommandPtr)(JNIEnv* env, jthread thread, char const** transport_name,
                                                                                 char const** address, jboolean* first_start);
 static debugInit_startDebuggingViaCommandPtr dvc_start_ptr = NULL;
@@ -1098,3 +1101,4 @@ void DebugOnCmddStartDCmd::execute(DCmdSource source, TRAPS) {
       output()->print_cr("Address : %s", addr ? addr : "#unknown");
   }
 }
+#endif // INCLUDE_JVMTI

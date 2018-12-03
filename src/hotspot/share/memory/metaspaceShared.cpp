@@ -570,6 +570,7 @@ static void rewrite_nofast_bytecodes_and_calculate_fingerprints() {
 }
 
 static void relocate_cached_class_file() {
+#if INCLUDE_JVMTI
   for (int i = 0; i < _global_klass_objects->length(); i++) {
     Klass* k = _global_klass_objects->at(i);
     if (k->is_instance_klass()) {
@@ -584,6 +585,7 @@ static void relocate_cached_class_file() {
       }
     }
   }
+#endif // INCLUDE_JVMTI
 }
 
 // Objects of the Metadata types (such as Klass and ConstantPool) have C++ vtables.
