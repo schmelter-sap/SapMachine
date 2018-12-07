@@ -780,7 +780,6 @@ socketTransport_close(jdwpTransportEnv* env)
     if (socketFD >= 0) {
         dbgsysSocketShutdownFull(socketFD);
     }
-
     return JDWPTRANSPORT_ERROR_NONE;
 }
 

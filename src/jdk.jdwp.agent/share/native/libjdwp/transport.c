@@ -732,8 +732,6 @@ transport_sendPacket(jdwpPacket *packet)
     if (transport != NULL) {
         if ( (*transport)->IsOpen(transport) ) {
             debugMonitorEnter(sendLock);
-            // JDI_ASSERT(packet->type.reply.flags == -128);
-            LOG_MISC(("Writing packet id %d with len %d, error %d", (int)packet->type.reply.len, (int)packet->type.reply.id, (int)packet->type.reply.errorCode));
             err = (*transport)->WritePacket(transport, packet);
             debugMonitorExit(sendLock);
         }
@@ -777,6 +775,5 @@ transport_receivePacket(jdwpPacket *packet)
          */
         return (jint)-1;
     }
-    LOG_MISC(("Receiving packet id %d with len %d, cmdSet %d, cmd %d", (int)packet->type.cmd.len, (int)packet->type.cmd.id, (int)packet->type.cmd.cmdSet, (int)packet->type.cmd.cmd));
     return 0;
 }

@@ -1171,13 +1171,13 @@ static onDemandAllowDebuggingError onDemand_allowDebugging(JNIEnv* env, jthread 
 }
 
 static onDemandStoppingError onDemand_stopDebugging(JNIEnv* env, jthread thread, jlong session_id, jlong* stopped_id) {
-    ensure_debug_on_demand_initialized();
+  ensure_debug_on_demand_initialized();
 
-    if (onDemand_functions[4] != NULL) {
-        return ((onDemand_stopDebuggingPtr) onDemand_functions[4])(env, thread, session_id, stopped_id);
-    }
+  if (onDemand_functions[4] != NULL) {
+    return ((onDemand_stopDebuggingPtr) onDemand_functions[4])(env, thread, session_id, stopped_id);
+  }
 
-    return STOPPING_ERROR_DISABLED;
+  return STOPPING_ERROR_DISABLED;
 }
 
 DebugOnDemandInfoDCmd::DebugOnDemandInfoDCmd(outputStream* output, bool heap) : DCmd(output, heap) {
@@ -1193,50 +1193,50 @@ void DebugOnDemandInfoDCmd::execute(DCmdSource source, TRAPS) {
   char const* transport = onDemand_getConfig(&has_is_server_override, &is_server_override, &has_address_override, address_override, (jint) sizeof(address_override));
 
   if (transport != NULL) {
-      jboolean is_server;
-      jlong session_id;
-      onDemandState state = onDemand_getState(&is_server, address, (jint) sizeof(address), &session_id);
+    jboolean is_server;
+    jlong session_id;
+    onDemandState state = onDemand_getState(&is_server, address, (jint) sizeof(address), &session_id);
       
-      if (state == ON_DEMAND_DISABLED) {
-        output()->print_cr("Debugging on demand is not enabled.");
-      } else {
-        output()->print_cr("Debugging on demand is currently enabled.");
+    if (state == ON_DEMAND_DISABLED) {
+      output()->print_cr("Debugging on demand is not enabled.");
+    } else {
+      output()->print_cr("Debugging on demand is currently enabled.");
         
-        if (has_is_server_override) {
-          output()->print_cr("It only supports %s mode", is_server_override ? "server" : "client");
-        }
-
-        if (has_address_override) {
-          output()->print_cr("It only supports connecting to %s", address_override);
-        }
-
-        if (state == ON_DEMAND_INITIAL) {
-          output()->print_cr("It is currently in the initial state and was not used yet.");
-        } else if (state == ON_DEMAND_INACTIVE) {
-          output()->print_cr("It is currently inactive, but was used before. The last session id was " JLONG_FORMAT, session_id);
-        } else {
-          if (state == ON_DEMAND_STARTING) {
-            output()->print_cr("The debugging system is currently starting up is is expected to be (waiting for) connecting shortly.");
-          } else if (state == ON_DEMAND_WAITING_FOR_CONNECTION) {
-            if (is_server) {
-              output()->print_cr("The debugging system is currently waiting for the debugger to connect.");
-            } else {
-              output()->print_cr("The debugging system is currently waiting for the debugger to be connected.");
-            }
-          } else if (state == ON_DEMAND_WATING_AFTER_HANDSHAKE) {
-            output()->print_cr("The debugger has connected and finished the handshake. It is now waiting for permission to continue.");
-          } else if (state == ON_DEMAND_CONNECTED) {
-            output()->print_cr("The debugger is currently attached and debugging.");
-          } else if (state == ON_DEMAND_STOPPING) {
-            output()->print_cr("The debugging system is currently stopping.");
-          } else {
-            output()->print_cr("The debugging system is in an unexpected state %d.", state);
-          }
-          output()->print_cr("The mode is %s.", is_server ? "server" : "client");
-          output()->print_cr("The address is %s", address);
-          output()->print_cr("The session id is " JLONG_FORMAT, session_id);
-        }
+      if (has_is_server_override) {
+        output()->print_cr("It only supports %s mode", is_server_override ? "server" : "client");
       }
+
+      if (has_address_override) {
+        output()->print_cr("It only supports connecting to %s", address_override);
+      }
+
+      if (state == ON_DEMAND_INITIAL) {
+        output()->print_cr("It is currently in the initial state and was not used yet.");
+      } else if (state == ON_DEMAND_INACTIVE) {
+        output()->print_cr("It is currently inactive, but was used before. The last session id was " JLONG_FORMAT, session_id);
+      } else {
+        if (state == ON_DEMAND_STARTING) {
+          output()->print_cr("The debugging system is currently starting up is is expected to be (waiting for) connecting shortly.");
+        } else if (state == ON_DEMAND_WAITING_FOR_CONNECTION) {
+          if (is_server) {
+            output()->print_cr("The debugging system is currently waiting for the debugger to connect.");
+          } else {
+            output()->print_cr("The debugging system is currently waiting for the debugger to be connected.");
+          }
+        } else if (state == ON_DEMAND_WATING_AFTER_HANDSHAKE) {
+          output()->print_cr("The debugger has connected and finished the handshake. It is now waiting for permission to continue.");
+        } else if (state == ON_DEMAND_CONNECTED) {
+          output()->print_cr("The debugger is currently attached and debugging.");
+        } else if (state == ON_DEMAND_STOPPING) {
+          output()->print_cr("The debugging system is currently stopping.");
+        } else {
+          output()->print_cr("The debugging system is in an unexpected state %d.", state);
+        }
+        output()->print_cr("The mode is %s.", is_server ? "server" : "client");
+        output()->print_cr("The address is %s", address);
+        output()->print_cr("The session id is " JLONG_FORMAT, session_id);
+      }
+    }
   } else {
     output()->print_cr("Debugging on demand is not enabled.");
   }
