@@ -279,3 +279,17 @@ ifeq ($(call isTargetOs, linux macosx), true)
 endif
 
 ################################################################################
+
+################################################################################
+# SapMachine 2024-11-21: Copy jmc agent jars
+
+  JMC_AGENT_DIR := $(TOPDIR)/src/java.base/share/lib/jmcagent
+  JCM_AGENT_VERSION := 1.0.1-SNAPSHOT
+  $(LIB_DST_DIR)/agent.jar: $(JMC_AGENT_DIR)/agent-$(JCM_AGENT_VERSION).jar
+	$(call install-file)
+  $(LIB_DST_DIR)/agent-boot.jar: $(JMC_AGENT_DIR)/agent-$(JCM_AGENT_VERSION)-boot.jar
+	$(call install-file)
+
+  TARGETS += $(LIB_DST_DIR)/agent.jar $(LIB_DST_DIR)/agent-boot.jar
+
+################################################################################
