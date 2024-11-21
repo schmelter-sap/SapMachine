@@ -2487,7 +2487,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
 #else
       #define JMC_AGENT "agent.jar"
       if (tail != NULL) {
-        size_t length = strlen(tail) + strlen(_java_home->value()) + strlen(JMC_AGENT) + 6;
+        size_t length = strlen(tail) + strlen(_java_home->value()) + strlen(JMC_AGENT) + 7;
         char *options = NEW_C_HEAP_ARRAY(char, length, mtArguments);
         jio_snprintf(options, length, "%s/lib/%s=%s", _java_home->value(), JMC_AGENT, tail);
         add_instrument_agent("instrument", options, false);
