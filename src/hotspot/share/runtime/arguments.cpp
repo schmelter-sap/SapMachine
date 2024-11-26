@@ -2485,11 +2485,11 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
         "Instrumentation agents are not supported in this VM\n");
       return JNI_ERR;
 #else
-      #define JMC_AGENT "agent.jar"
+      char const* agent_jar = "agent.jar";
       if (tail != NULL) {
-        size_t length = strlen(tail) + strlen(_java_home->value()) + strlen(JMC_AGENT) + 7;
+        size_t length = strlen(tail) + strlen(_java_home->value()) + strlen(agent_jar) + 7;
         char *options = NEW_C_HEAP_ARRAY(char, length, mtArguments);
-        jio_snprintf(options, length, "%s/lib/%s=%s", _java_home->value(), JMC_AGENT, tail);
+        jio_snprintf(options, length, "%s/lib/%s=%s", _java_home->value(), agent_jar, tail);
         add_instrument_agent("instrument", options, false);
         // java agents need module java.instrument
         if (!create_numbered_module_property("jdk.module.addmods", "java.instrument", addmods_count++)) {

@@ -189,6 +189,24 @@ public:
   }
   virtual void execute(DCmdSource source, TRAPS);
 };
+
+class JVMTIJmcAgentLoadDCmd : public DCmdWithParser {
+protected:
+    DCmdArgument<char*> _option;
+public:
+    JVMTIJmcAgentLoadDCmd(outputStream* output, bool heap);
+    static const char* name() { return "JVMTI.jmc_agent_load"; }
+    static const char* description() {
+        return "Load the JCM agent.";
+    }
+    static const char* impact() { return "Low"; }
+    static const JavaPermission permission() {
+        JavaPermission p = { "java.lang.management.ManagementPermission",
+                            "control", NULL };
+        return p;
+    }
+    virtual void execute(DCmdSource source, TRAPS);
+};
 #endif // INCLUDE_JVMTI
 #endif // INCLUDE_SERVICES
 
