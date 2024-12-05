@@ -17,23 +17,14 @@ import java.util.ArrayList;
 public class TestJmcAgentIntegration {
 
     public static void main(String[] args) throws Exception {
-        File testSrc = new File(System.getProperty("test.src"));
-        ArrayList<Path> jarFiles = new ArrayList<>();
-
-        try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(
-            testSrc.toPath(), "agent-*-sap-tests.jar")) {
-            dirStream.forEach(path -> jarFiles.add(path));
+        File jar = new File(System.getenv("TEST_IMAGE_DIR") + "/jars/agent-tests.jar");
+        if (!jar.exists()) {
+            return; // Feature was not enabled.
         }
-
-        if (jarFiles.size() != 1) {
-            throw new RuntimeException("Found " + jarFiles.size() + " test jare files");
-        }
-
-        File file = jarFiles.get(0).toFile();
-        URL url = file.toURI().toURL();
+        URL url = jar.toURI().toURL();
         String classPath = System.getProperty("java.class.path", ".");
 
-        System.setProperty("java.class.path", classPath + System.getProperty("path.separator") + file.toString());
+        System.setProperty("java.class.path", classPath + System.getProperty("path.separator") + jar.toString());
         System.setProperty("useJmcAgentOption", "true");
         System.setProperty("traceExecs", "true");
 

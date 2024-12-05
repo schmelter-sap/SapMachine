@@ -2479,12 +2479,16 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
         }
       }
 #endif // !INCLUDE_JVMTI
+    // SapMachine 2024-12-05: Handle jmc agent if requested.
     } else if (match_option(option, "-jmcagent:", &tail)) {
-#if !INCLUDE_JVMTI
-      jio_fprintf(defaultStream::error_stream(),
-        "Instrumentation agents are not supported in this VM\n");
-      return JNI_ERR;
+#if !defined(WITH_SAP_JMC_AGENT)
+        jio_fprintf(defaultStream::error_stream(),
+            "SAP JMC agent is not included in this VM\n");
+        return JNI_ERR;
 #else
+#if !INCLUDE_JVMTI
+#error "Must have JVMTI enabled with SAP JVM agent"
+#endif
       char const* agent_jar = "agent.jar";
       if (tail != NULL) {
         size_t length = strlen(tail) + strlen(_java_home->value()) + strlen(agent_jar) + 7;
@@ -2496,7 +2500,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
           return JNI_ENOMEM;
         }
       }
-#endif // !INCLUDE_JVMTI
+#endif // !WITH_SAP_JMC_AGENT
     // --enable_preview
     } else if (match_option(option, "--enable-preview")) {
       set_enable_preview();

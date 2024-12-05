@@ -282,14 +282,13 @@ endif
 
 ################################################################################
 # SapMachine 2024-11-21: Copy jmc agent jars
-
-  JMC_AGENT_DIR := $(TOPDIR)/src/java.base/share/lib/jmcagent
-  JCM_AGENT_PREFIX := $(subst -boot.jar,,$(notdir $(wildcard $(JMC_AGENT_DIR)/agent-*-boot.jar)))
-  $(LIB_DST_DIR)/agent.jar: $(JMC_AGENT_DIR)/$(JCM_AGENT_PREFIX).jar
+ifeq ($(SAP_JMC_AGENT_ENABLED), true)
+  $(LIB_DST_DIR)/agent.jar: $(SAP_JMC_AGENT_PATH)/agent-$(SAP_JMC_AGENT_VERSION).jar
 	$(call install-file)
-  $(LIB_DST_DIR)/agent-boot.jar: $(JMC_AGENT_DIR)/$(JCM_AGENT_PREFIX)-boot.jar
+  $(LIB_DST_DIR)/agent-boot.jar: $(SAP_JMC_AGENT_PATH)/agent-$(SAP_JMC_AGENT_VERSION)-boot.jar
 	$(call install-file)
 
   TARGETS += $(LIB_DST_DIR)/agent.jar $(LIB_DST_DIR)/agent-boot.jar
+endif
 
 ################################################################################
