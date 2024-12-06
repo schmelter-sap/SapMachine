@@ -190,6 +190,8 @@ public:
   virtual void execute(DCmdSource source, TRAPS);
 };
 
+// SapMachine 2024-12-05
+#if defined(WITH_SAP_JMC_AGENT)
 class JVMTIJmcAgentLoadDCmd : public DCmdWithParser {
 protected:
     DCmdArgument<char*> _option;
@@ -207,6 +209,8 @@ public:
     }
     virtual void execute(DCmdSource source, TRAPS);
 };
+#endif // WITH_SAP_JMC_AGENT
+
 #endif // INCLUDE_JVMTI
 #endif // INCLUDE_SERVICES
 
