@@ -729,26 +729,27 @@ const int ObjectAlignmentInBytes = 8;
           "compression. Otherwise the level must be between 1 and 9.")      \
           range(0, 9)                                                       \
                                                                             \
-  /* SAPJVM 206-02-06: Allow heap dump overwrites */                        \
+  /* SAPJVM 2026-02-06: Allow heap dump overwrites */                       \
   product(bool, AllowHeapDumpOverwrite, false, MANAGEABLE,                  \
           "If enabled, we allow the heap dump on out of memory error an "   \
           "already existing file.")                                         \
                                                                             \
-  /* SAPJVM 206-02-06: Allow to skip content of large arrays in dumps.*/    \
+  /* SAPJVM 2026-02-06: Allow to skip content of large arrays in dumps.*/   \
   product(bool, LimitPrimArrayContentInHeapDump, false, MANAGEABLE,         \
           "If enabled, the content of primitive arrays in not completely "  \
           "written to a heap dump for large arrays. Note that this only "   \
           "really safes space, if the compression of the heap dump is "     \
-          "enabled too.")                                                   \
+          "enabled too, since the skipped elements are written as "         \
+          "0 or false.")                                                    \
                                                                             \
-  /* SAPJVM 206-02-06: Allow to skip content of large arrays in dumps.*/    \
-  product(int, StringLikeContentSizeLimitInHeapDump, 500, MANAGEABLE,       \
+  /* SAPJVM 2026-02-06: Allow to skip content of large arrays in dumps.*/   \
+  product(int, StringLikeContentSizeLimitInHeapDump, 250, MANAGEABLE,       \
           "The number of entries in a primitive char and bytes arrays to "  \
           "not skip in a heap dump when ArrayContentSizeLimitInHeapDump "   \
           "is enabled.")                                                    \
           range(0, 100000)                                                  \
                                                                             \
-  /* SAPJVM 206-02-06: Allow to skip content of large arrays in dumps.*/    \
+  /* SAPJVM 2026-02-06: Allow to skip content of large arrays in dumps.*/   \
   product(int, ArrayContentSizeLimitInHeapDump, 100, MANAGEABLE,            \
           "The number of entries in a primitive array other than char and " \
           "byte arrays to not skip in a heap dump when "                    \

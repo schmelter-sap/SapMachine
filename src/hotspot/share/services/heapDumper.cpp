@@ -2644,6 +2644,12 @@ int HeapDumper::dump(const char* path, outputStream* out, int compression, bool 
   // print message in interactive case
   if (out != nullptr) {
     out->print_cr("Dumping heap to %s ...", path);
+    // SapMachine 2026-02-12: Inform about limited content of primitive arrays.
+    if (LimitPrimArrayContentInHeapDump) {
+      out->print_cr("Dump will only contain the first %d elements of byte and char arrays and the first %d elements of other primitive arrays.",
+        StringLikeContentSizeLimitInHeapDump, ArrayContentSizeLimitInHeapDump);
+      out->print_cr("The remaining elements will be 0/false.");
+    }
     timer()->start();
   }
 
