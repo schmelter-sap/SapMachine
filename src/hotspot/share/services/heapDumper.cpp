@@ -2776,7 +2776,7 @@ void HeapDumper::set_error(char const* error) {
 // outside of a JVM safepoint
 void HeapDumper::dump_heap_from_oome() {
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  HeapDumper::dump_heap(false, true, UseTTYDuringHeapDump ? tty : nullptr, HeapDumpGzipLevel, AllowHeapDumpOverwrite);
+  HeapDumper::dump_heap(false, true, tty, HeapDumpGzipLevel, AllowHeapDumpOverwrite);
 }
 
 // Called by error reporting by a single Java thread outside of a JVM safepoint,
@@ -2786,7 +2786,7 @@ void HeapDumper::dump_heap_from_oome() {
 // inteference when updating the static variables base_path and dump_file_seq below.
 void HeapDumper::dump_heap() {
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  HeapDumper::dump_heap(false, false, UseTTYDuringHeapDump ? tty : nullptr, HeapDumpGzipLevel, AllowHeapDumpOverwrite);
+  HeapDumper::dump_heap(false, false, tty, HeapDumpGzipLevel, AllowHeapDumpOverwrite);
 }
 
 // SapMachine 2024-05-10: HeapDumpPath for jcmd

@@ -730,11 +730,6 @@ const int ObjectAlignmentInBytes = 8;
           range(0, 9)                                                       \
                                                                             \
   /* SAPJVM 206-02-06: Allow heap dump overwrites */                        \
-  product(bool, UseTTYDuringHeapDump, false, MANAGEABLE,                    \
-          "If enabled, the heap dump writes some information to the tty "   \
-          "during a heap dump.")                                            \
-                                                                            \
-  /* SAPJVM 206-02-06: Allow heap dump overwrites */                        \
   product(bool, AllowHeapDumpOverwrite, false, MANAGEABLE,                  \
           "If enabled, we allow the heap dump on out of memory error an "   \
           "already existing file.")                                         \
