@@ -711,6 +711,11 @@ const int ObjectAlignmentInBytes = 8;
           "compression. Otherwise the level must be between 1 and 9.")      \
           range(0, 9)                                                       \
                                                                             \
+  /* SAPJVM 2026-02-06: Allow heap dump overwrites */                       \
+  product(bool, AllowHeapDumpOverwrite, false, MANAGEABLE,                  \
+          "If enabled, we allow the heap dump on out of memory error an "   \
+          "already existing file.")                                         \
+                                                                            \
   product(ccstr, NativeMemoryTracking, DEBUG_ONLY("summary") NOT_DEBUG("off"), \
           "Native memory tracking options")                                 \
                                                                             \

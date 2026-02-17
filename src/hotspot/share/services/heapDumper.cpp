@@ -2621,7 +2621,7 @@ void HeapDumper::set_error(char const* error) {
 // outside of a JVM safepoint
 void HeapDumper::dump_heap_from_oome() {
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  HeapDumper::dump_heap(false, true);
+  HeapDumper::dump_heap(false, true, tty, HeapDumpGzipLevel, AllowHeapDumpOverwrite);
 }
 
 // Called by error reporting by a single Java thread outside of a JVM safepoint,
@@ -2631,7 +2631,7 @@ void HeapDumper::dump_heap_from_oome() {
 // inteference when updating the static variables base_path and dump_file_seq below.
 void HeapDumper::dump_heap() {
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  HeapDumper::dump_heap(false, false);
+  HeapDumper::dump_heap(false, false, tty, HeapDumpGzipLevel, AllowHeapDumpOverwrite);
 }
 
 // SapMachine 2024-05-10: HeapDumpPath for jcmd
@@ -2648,8 +2648,7 @@ void HeapDumper::dump_heap(bool gc_before_heap_dump, bool oome, outputStream* ou
 
   const char* dump_file_name = "java_pid";
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  const int ziplevel = compression < 0 ? HeapDumpGzipLevel : compression;
-  const char* dump_file_ext  = ziplevel > 0 ? ".hprof.gz" : ".hprof";
+  const char* dump_file_ext  = compression > 0 ? ".hprof.gz" : ".hprof";
 
   // The dump file defaults to java_pid<pid>.hprof in the current working
   // directory. HeapDumpPath=<file> can be used to specify an alternative
@@ -2718,6 +2717,6 @@ void HeapDumper::dump_heap(bool gc_before_heap_dump, bool oome, outputStream* ou
   HeapDumper dumper(gc_before_heap_dump /* GC before heap dump */,
                     oome  /* pass along out-of-memory-error flag */);
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  dumper.dump(my_path, out, ziplevel, overwrite);
+  dumper.dump(my_path, out, compression, overwrite);
   os::free(my_path);
 }
