@@ -2699,6 +2699,12 @@ int HeapDumper::dump(const char* path, outputStream* out, int compression, bool 
   // record any error that the writer may have encountered
   set_error(writer.error());
 
+  if (out != nullptr) {
+    timer()->stop();
+    out->print_cr("Heap dump file segments created [%3.3f secs]", timer()->seconds());
+    timer()->start();
+  }
+
   // Heap dump process is done in two phases
   //
   // Phase 1: Concurrent threads directly write heap data to multiple heap files.
