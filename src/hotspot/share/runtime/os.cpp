@@ -1582,6 +1582,21 @@ bool os::write(int fd, const void *buf, size_t nBytes) {
   return true;
 }
 
+bool os::write_at(int fd, const void* buf, size_t nBytes, jlong offset) {
+    ssize_t res;
+
+    while (nBytes > 0) {
+        res = pd_write_at(fd, buf, nBytes, offset);
+        if (res == OS_ERR) {
+            return false;
+        }
+        buf = (void*)((char*)buf + res);
+        nBytes -= res;
+        offset += res;
+    }
+
+    return true;
+}
 
 // Splits a path, based on its separator, the number of
 // elements is returned back in "elements".

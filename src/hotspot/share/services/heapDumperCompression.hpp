@@ -54,6 +54,7 @@ public:
 
   // Does the write. Returns null on success and a static error message otherwise.
   virtual char const* write_buf(char* buf, ssize_t size) = 0;
+  virtual char const* write_buf_at(char* buf, ssize_t size, jlong offset) = 0;
 };
 
 
@@ -74,6 +75,7 @@ public:
 
   // Does the write. Returns null on success and a static error message otherwise.
   virtual char const* write_buf(char* buf, ssize_t size);
+  virtual char const* write_buf_at(char* buf, ssize_t size, jlong offset);
 };
 
 

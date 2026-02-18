@@ -5126,6 +5126,28 @@ ssize_t os::pd_write(int fd, const void *buf, size_t nBytes) {
   return original_len;
 }
 
+ssize_t os::pd_write_at(int fd, const void* buf, size_t nBytes, jlong offset) {
+    unsigned int len = nBytes > INT_MAX ? INT_MAX : (unsigned int)nBytes;
+    // On Windows, ::write takes 'unsigned int' no of bytes, so nBytes should be split if larger.
+    OVERLAPPED ov;
+    DWORD nwritten;
+    BOOL result;
+
+    ZeroMemory(&ov, sizeof(ov));
+    ov.Offset = (DWORD)offset;
+    ov.OffsetHigh = (DWORD)(offset >> 32);
+
+    HANDLE h = (HANDLE)::_get_osfhandle(fd);
+
+    result = WriteFile(h, (LPVOID)buf, len, &nwritten, &ov);
+
+    if ((result == FALSE) && (nwritten <= 0)) {
+        return OS_ERR;
+    }
+
+    return nwritten;
+}
+
 void os::exit(int num) {
   win32::exit_process_or_thread(win32::EPT_PROCESS, num);
 }

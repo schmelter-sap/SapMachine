@@ -52,14 +52,26 @@ FileWriter::~FileWriter() {
 }
 
 char const* FileWriter::write_buf(char* buf, ssize_t size) {
-  assert(_fd >= 0, "Must be open");
-  assert(size > 0, "Must write at least one byte");
+    assert(_fd >= 0, "Must be open");
+    assert(size > 0, "Must write at least one byte");
 
-  if (!os::write(_fd, buf, (size_t)size)) {
-    return os::strerror(errno);
-  }
+    if (!os::write(_fd, buf, (size_t)size)) {
+        return os::strerror(errno);
+    }
 
-  return nullptr;
+    return nullptr;
+}
+
+char const* FileWriter::write_buf_at(char* buf, ssize_t size, jlong offset) {
+    assert(_fd >= 0, "Must be open");
+    assert(size > 0, "Must write at least one byte");
+    assert(offset >= 0, "Must not be negative");
+
+    if (!os::write_at(_fd, buf, (size_t)size, offset)) {
+        return os::strerror(errno);
+    }
+
+    return nullptr;
 }
 
 
@@ -482,14 +494,25 @@ void CompressionBackend::finish_work(WriteWork* work) {
     char const* msg = nullptr;
 
     if (_err == nullptr) {
-      _written += size;
-      MutexUnlocker mu(_lock, Mutex::_no_safepoint_check_flag);
-      msg = _writer->write_buf(p, (ssize_t) size);
+      if (UseParallelWriteInHeapDump) {
+          jlong offset = (jlong) _written;
+          _written += size;
+          _id_to_write++;
+          MutexUnlocker mu(_lock, Mutex::_no_safepoint_check_flag);
+          msg = _writer->write_buf_at(p, (ssize_t)size, offset);
+      } else {
+        _written += size;
+        MutexUnlocker mu(_lock, Mutex::_no_safepoint_check_flag);
+        msg = _writer->write_buf(p, (ssize_t)size);
+      }
     }
 
     set_error(msg);
     _unused.add_first(to_write);
-    _id_to_write++;
+
+    if (!UseParallelWriteInHeapDump) {
+      _id_to_write++;
+    }
   }
 
   ml.notify_all();

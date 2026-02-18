@@ -785,10 +785,15 @@ ssize_t os::pd_write(int fd, const void *buf, size_t nBytes) {
   return res;
 }
 
+ssize_t pd_write_at(int fd, const void* buf, size_t nBytes, jlong offset) {
+    ssize_t res;
+    RESTARTABLE(::pwrite(fd, buf, nBytes), res, offset);
+    return res;
+}
+
 ssize_t os::read_at(int fd, void *buf, unsigned int nBytes, jlong offset) {
   return ::pread(fd, buf, nBytes, offset);
 }
-
 void os::flockfile(FILE* fp) {
   ::flockfile(fp);
 }

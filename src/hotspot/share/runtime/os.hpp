@@ -235,6 +235,7 @@ class os: AllStatic {
   static void  get_summary_os_info(char* buf, size_t buflen);
   // Returns number of bytes written on success, OS_ERR on failure.
   static ssize_t pd_write(int fd, const void *buf, size_t nBytes);
+  static ssize_t pd_write_at(int fd, const void* buf, size_t nBytes, jlong offset);
 
   static void initialize_initial_active_processor_count();
 
@@ -663,6 +664,7 @@ class os: AllStatic {
   static ssize_t read_at(int fd, void *buf, unsigned int nBytes, jlong offset);
   // Writes the bytes completely. Returns true on success, false otherwise.
   static bool write(int fd, const void *buf, size_t nBytes);
+  static bool write_at(int fd, const void* buf, size_t nBytes, jlong offset);
 
   // Reading directories.
   static DIR*           opendir(const char* dirname);
