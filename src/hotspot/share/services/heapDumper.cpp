@@ -2475,7 +2475,7 @@ void VM_HeapDumper::work(uint worker_id) {
 
   ResourceMark rm;
   // share global compressor, local DumpWriter is not responsible for its life cycle
-  // SAPMachine 2026-02-27: When we don't do a parallel dump. don't use segments (we create
+  // SapMachine 2026-02-27: When we don't do a parallel dump. don't use segments (we create
   // an empty temporary file in reality, but that should be OK).
   DumpWriter part_writer(DumpMerger::get_writer_path(writer()->get_file_path(), dumper_id),
                          writer()->is_overwrite(), writer()->compressor());
@@ -2589,7 +2589,7 @@ void VM_HeapDumper::dump_vthread(oop vt, AbstractDumpWriter* segment_writer) {
   thread_dumper.init_serial_nums(&_thread_serial_num, &_frame_serial_num);
 
   // write HPROF_TRACE/HPROF_FRAME records to global writer
-  // SAPMachine 2026-02-27: If we don't do a parallel dump, we don't need the lock
+  // SapMachine 2026-02-27: If we don't do a parallel dump, we don't need the lock
   // but have to end the current heap dump segment.
   if (is_parallel_dump()) {
     _dumper_controller->lock_global_writer();
@@ -2746,7 +2746,7 @@ void HeapDumper::set_error(char const* error) {
 // outside of a JVM safepoint
 void HeapDumper::dump_heap_from_oome() {
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  HeapDumper::dump_heap(false, true);
+  HeapDumper::dump_heap(false, true, tty, HeapDumpGzipLevel, HeapDumpOverwrite, HeapDumpParallelism);
 }
 
 // Called by error reporting by a single Java thread outside of a JVM safepoint,
@@ -2756,7 +2756,7 @@ void HeapDumper::dump_heap_from_oome() {
 // inteference when updating the static variables base_path and dump_file_seq below.
 void HeapDumper::dump_heap() {
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  HeapDumper::dump_heap(false, false);
+  HeapDumper::dump_heap(false, false, tty, HeapDumpGzipLevel, HeapDumpOverwrite, HeapDumpParallelism);
 }
 
 // SapMachine 2024-05-10: HeapDumpPath for jcmd
@@ -2771,8 +2771,12 @@ void HeapDumper::dump_heap(bool gc_before_heap_dump, bool oome, outputStream* ou
   char my_path[JVM_MAXPATHLEN];
   const int max_digit_chars = 20;
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  const int ziplevel = compression < 0 ? HeapDumpGzipLevel : compression;
-  const char* dump_file_name = ziplevel > 0 ? "java_pid%p.hprof.gz" : "java_pid%p.hprof";
+  const char* dump_file_name = compression > 0 ? "java_pid%p.hprof.gz" : "java_pid%p.hprof";
+
+  // SapMachine 2026-02-27: Convert 0 to default parallel threads.
+  if (parallel_thread_num == 0) {
+    parallel_thread_num = HeapDumper::default_num_of_dump_threads();
+  }
 
   // The dump file defaults to java_pid<pid>.hprof in the current working
   // directory. HeapDumpPath=<file> can be used to specify an alternative
@@ -2817,5 +2821,5 @@ void HeapDumper::dump_heap(bool gc_before_heap_dump, bool oome, outputStream* ou
   HeapDumper dumper(gc_before_heap_dump /* GC before heap dump */,
                     oome  /* pass along out-of-memory-error flag */);
   // SapMachine 2024-05-10: HeapDumpPath for jcmd
-  dumper.dump(my_path, out, ziplevel, overwrite, parallel_thread_num);
+  dumper.dump(my_path, out, compression, overwrite, parallel_thread_num);
 }

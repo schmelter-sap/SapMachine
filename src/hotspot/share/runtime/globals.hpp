@@ -729,6 +729,16 @@ const int ObjectAlignmentInBytes = 8;
           "compression. Otherwise the level must be between 1 and 9.")      \
           range(0, 9)                                                       \
                                                                             \
+  /* SapMachine 2026-02-27: Allow to overwrite the heap dump file. */       \
+  product(bool, HeapDumpOverwrite, false, MANAGEABLE,                       \
+          "If enabled, the heap dump of out of memory error can overwrite " \
+          "an already existing heap dump file.")                            \
+                                                                            \
+  /* SapMachine 2026-02-27: Sets the parallelism of the heap dump. */       \
+  product(uint, HeapDumpParallelism, 0, MANAGEABLE,                         \
+          "Sets the parallelism of the heap dump creation. 0 means to let  "\
+          "the VM decide.")                                                 \
+                                                                            \
   product(ccstr, NativeMemoryTracking, DEBUG_ONLY("summary") NOT_DEBUG("off"), \
           "Native memory tracking options")                                 \
                                                                             \
