@@ -2475,8 +2475,12 @@ void VM_HeapDumper::work(uint worker_id) {
 
   ResourceMark rm;
   // share global compressor, local DumpWriter is not responsible for its life cycle
-  DumpWriter segment_writer(DumpMerger::get_writer_path(writer()->get_file_path(), dumper_id),
-                            writer()->is_overwrite(), writer()->compressor());
+  // SAPMachine 2026-02-27: When we don't do a parallel dump. don't use segments (we create
+  // an empty temporary file in reality, but that should be OK).
+  DumpWriter part_writer(DumpMerger::get_writer_path(writer()->get_file_path(), dumper_id),
+                         writer()->is_overwrite(), writer()->compressor());
+  DumpWriter& segment_writer = is_parallel_dump() ? part_writer : *writer();
+
   if (!segment_writer.has_error()) {
     if (is_vm_dumper(dumper_id)) {
       // dump some non-heap subrecords to heap dump segment
@@ -2585,9 +2589,17 @@ void VM_HeapDumper::dump_vthread(oop vt, AbstractDumpWriter* segment_writer) {
   thread_dumper.init_serial_nums(&_thread_serial_num, &_frame_serial_num);
 
   // write HPROF_TRACE/HPROF_FRAME records to global writer
-  _dumper_controller->lock_global_writer();
-  thread_dumper.dump_stack_traces(writer(), _klass_map);
-  _dumper_controller->unlock_global_writer();
+  // SAPMachine 2026-02-27: If we don't do a parallel dump, we don't need the lock
+  // but have to end the current heap dump segment.
+  if (is_parallel_dump()) {
+    _dumper_controller->lock_global_writer();
+    thread_dumper.dump_stack_traces(writer(), _klass_map);
+    _dumper_controller->unlock_global_writer();
+  }
+  else {
+    segment_writer->finish_dump_segment();
+    thread_dumper.dump_stack_traces(writer(), _klass_map);
+  }
 
   // write HPROF_GC_ROOT_THREAD_OBJ/HPROF_GC_ROOT_JAVA_FRAME/HPROF_GC_ROOT_JNI_LOCAL subrecord
   // to segment writer
