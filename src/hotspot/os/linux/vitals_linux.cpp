@@ -266,7 +266,7 @@ static void set_value_in_sample(Column* col, Sample* sample, value_t val) {
   }
 }
 
-void sample_platform_values(Sample* sample) {
+void sample_platform_values(Sample* sample, bool sample_for_long_term) {
 
   int idx = 0;
 

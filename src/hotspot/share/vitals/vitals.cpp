@@ -227,7 +227,7 @@ public:
 
   // given a sample (and an optional preceding sample for delta values),
   //   update widths to accommodate sample values (uses dry-printing)
-  void update_from_sample(const Sample* sample, const Sample* last_sample, const print_info_t* pi, int add_width = 0) {
+  void update_from_sample(const Sample* sample, TableType table_type, const Sample* last_sample, const print_info_t* pi, int add_width = 0) {
     const Column* c = ColumnList::the_list()->first();
     while (c != nullptr) {
       const int idx = c->index();
@@ -238,7 +238,7 @@ public:
         v2 = last_sample->value(idx);
         age = sample->timestamp() - last_sample->timestamp();
       }
-      int needed = c->calc_print_size(v, v2, age, pi) + add_width;
+      int needed = c->calc_print_size(v, table_type, v2, age, pi) + add_width;
       if (_widths[idx] < needed) {
         _widths[idx] = needed;
       }
@@ -512,11 +512,11 @@ Column::Column(const char* category, const char* header, const char* name, const
     _idx_cat(-1), _idx_hdr(-1)
 {}
 
-void Column::print_value(outputStream* st, value_t value, value_t last_value,
+void Column::print_value(outputStream* st, value_t value, TableType table_type, value_t last_value,
     int last_value_age, int min_width, const print_info_t* pi, char const* marker) const {
 
   // We print all values right aligned.
-  int needed = calc_print_size(value, last_value, last_value_age, pi);
+  int needed = calc_print_size(value, table_type, last_value, last_value_age, pi);
   if (pi->csv == false && min_width > needed) {
     // In ascii (non csv) mode, pad to minimum width
     ostream_put_n(st, ' ', min_width - needed);
@@ -525,7 +525,7 @@ void Column::print_value(outputStream* st, value_t value, value_t last_value,
   if (pi->csv) {
     st->put('"');
   }
-  do_print(st, value, last_value, last_value_age, pi);
+  do_print(st, value, table_type, last_value, last_value_age, pi);
   st->print_raw(marker);
   if (pi->csv) {
     st->put('"');
@@ -533,12 +533,12 @@ void Column::print_value(outputStream* st, value_t value, value_t last_value,
 }
 
 // Returns the number of characters this value needs to be printed.
-int Column::calc_print_size(value_t value, value_t last_value,
+int Column::calc_print_size(value_t value, TableType table_type, value_t last_value,
     int last_value_age, const print_info_t* pi) const {
-  return do_print(nullptr, value, last_value, last_value_age, pi);
+  return do_print(nullptr, value, table_type, last_value, last_value_age, pi);
 }
 
-int Column::do_print(outputStream* st, value_t value, value_t last_value,
+int Column::do_print(outputStream* st, value_t value, TableType table_type, value_t last_value,
                      int last_value_age, const print_info_t* pi) const {
   if (value == INVALID_VALUE) {
     if (pi->raw) {
@@ -551,24 +551,24 @@ int Column::do_print(outputStream* st, value_t value, value_t last_value,
     }
   } else {
     if (pi->raw) {
-      return do_print_raw0(st, value);
+      return do_print_raw0(st, value, table_type);
     } else {
-      return do_print0(st, value, last_value, last_value_age, pi);
+      return do_print0(st, value, table_type, last_value, last_value_age, pi);
     }
   }
 }
 
-int Column::do_print_raw0(outputStream* st, value_t value) const {
+int Column::do_print_raw0(outputStream* st, value_t value, TableType table_type) const {
   return printf_helper(st, UINT64_FORMAT, value);
 }
 
-int PlainValueColumn::do_print0(outputStream* st, value_t value,
+int PlainValueColumn::do_print0(outputStream* st, value_t value, TableType table_type,
     value_t last_value, int last_value_age, const print_info_t* pi) const
 {
   return printf_helper(st, UINT64_FORMAT, value);
 }
 
-int DeltaValueColumn::do_print0(outputStream* st, value_t value,
+int DeltaValueColumn::do_print0(outputStream* st, value_t value, TableType table_type,
     value_t last_value, int last_value_age, const print_info_t* pi) const {
   if (last_value > value) {
     // we assume the underlying value to be monotonically raising, and that
@@ -582,12 +582,12 @@ int DeltaValueColumn::do_print0(outputStream* st, value_t value,
   return 0;
 }
 
-int MemorySizeColumn::do_print0(outputStream* st, value_t value,
+int MemorySizeColumn::do_print0(outputStream* st, value_t value, TableType table_type,
     value_t last_value, int last_value_age, const print_info_t* pi) const {
   return print_memory_size(st, value, pi->scale);
 }
 
-int DeltaMemorySizeColumn::do_print0(outputStream* st, value_t value,
+int DeltaMemorySizeColumn::do_print0(outputStream* st, value_t value, TableType table_type,
     value_t last_value, int last_value_age, const print_info_t* pi) const {
   if (last_value != INVALID_VALUE) {
     return print_memory_size(st, value - last_value, pi->scale);
@@ -595,7 +595,7 @@ int DeltaMemorySizeColumn::do_print0(outputStream* st, value_t value,
   return 0;
 }
 
-int LoadAverageColumn::do_print0(outputStream* st, value_t value,
+int LoadAverageColumn::do_print0(outputStream* st, value_t value, TableType table_type,
     value_t last_value, int last_value_age, const print_info_t* pi) const {
   if (value != INVALID_VALUE) {
     value_t load_average;
@@ -617,14 +617,52 @@ int LoadAverageColumn::do_print0(outputStream* st, value_t value,
   return 0;
 }
 
-int LoadAverageColumn::do_print_raw0(outputStream* st, value_t value) const {
-  return do_print0(st, value, INVALID_VALUE, 0, nullptr);
+int LoadAverageColumn::do_print_raw0(outputStream* st, value_t value, TableType table_type) const {
+  return do_print0(st, value, table_type, INVALID_VALUE, 0, nullptr);
+}
+
+static float* load_avg_hist = nullptr;
+static int load_avg_hist_size = 0;
+static int load_avg_hist_next_pos = 0;
+
+void LoadAverageColumn::set_load_average(Sample* sample, double load_avg, bool sample_for_long_term) {
+  if (load_avg_hist == nullptr) {
+    load_avg_hist_size = (int) (1 + VitalsLongTermSampleIntervalMinutes * 60 / MIN2((uintx) 1, VitalsSampleInterval));
+    load_avg_hist = NEW_C_HEAP_ARRAY(float, load_avg_hist_size, mtInternal);
+
+    for (int i = 0; i < load_avg_hist_size; ++i) {
+      load_avg_hist[i] = -1.0;
+    }
+  }
+
+  load_avg_hist[load_avg_hist_next_pos] = load_avg;
+  load_avg_hist_next_pos = (load_avg_hist_next_pos + 1) % load_avg_hist_size;
+
+  double history_average = 0.0;
+  int nr_of_history_entries = 0;
+
+  // Only take the long term value if this sample ends up in the long term table.
+  if (sample_for_long_term) {
+    for (int i = 0; i < load_avg_hist_size; ++i) {
+      if (load_avg_hist[i] >= 0.0) {
+        history_average += load_avg_hist[i];
+        nr_of_history_entries++;
+      }
+    }
+
+    history_average /= MAX2(1, nr_of_history_entries);
+  }
+
+  value_t short_term = (value_t) MAX2(0.0, MIN2(65535.0, load_avg));
+  value_t long_term = (value_t) MAX2(0.0, MIN2(65535.0, history_average));
+  log_debug(vitals)("Setting load average to %d/%d", (int)short_term, (int)long_term);
+  sample->set_value(index(), (short_term << 16) | long_term);
 }
 
 ////////////// sample printing ///////////////////////////
 
 // Print one sample.
-static void print_one_sample(outputStream* st, const Sample* sample,
+static void print_one_sample(outputStream* st, const Sample* sample, TableType table_type,
     const Sample* last_sample, const ColumnWidths* widths, const print_info_t* pi, int marked_index = -1, char const* mark = nullptr) {
 
   // Print timestamp and divider
@@ -653,7 +691,7 @@ static void print_one_sample(outputStream* st, const Sample* sample,
       age = sample->timestamp() - last_sample->timestamp();
     }
     const int min_width = widths->at(idx) - (marked_index >= 0 ? 1 : 0);
-    c->print_value(st, v, v2, age, min_width, pi,
+    c->print_value(st, v, table_type, v2, age, min_width, pi,
                   marked_index == idx ? mark : (marked_index >= 0 && !pi->csv ? " " : ""));
     st->put(pi->csv ? ',' : ' ');
     c = c->next();
@@ -667,6 +705,7 @@ static void print_one_sample(outputStream* st, const Sample* sample,
 class SampleTable : public CHeapObj<mtInternal> {
 
   const int _num_entries;
+  bool _long_term_table;
   int _head;      // Index of the last sample written; -1 if none have been written yet
   bool _did_wrap;
   Sample* _samples;
@@ -685,8 +724,9 @@ class SampleTable : public CHeapObj<mtInternal> {
 
 public:
 
-  SampleTable(int num_entries)
+  SampleTable(int num_entries, bool long_term_table)
     : _num_entries(num_entries),
+      _long_term_table(long_term_table),
       _head(-1),
       _did_wrap(false),
       _samples(nullptr)
@@ -700,6 +740,8 @@ public:
   }
 
   bool is_empty() const { return _head == -1; }
+
+  bool is_long_term_table() const { return _long_term_table; }
 
   const Sample* sample_at(int index) const { return (Sample*)((uint8_t*)_samples + sample_offset_in_bytes(index)); }
   Sample* sample_at(int index) { return (Sample*)((uint8_t*)_samples + sample_offset_in_bytes(index)); }
@@ -774,30 +816,32 @@ public:
 };
 
 class MeasureColumnWidthsClosure : public SampleTable::Closure {
+  TableType _table_type;
   const print_info_t* const _pi;
   ColumnWidths* const _widths;
 
 public:
-  MeasureColumnWidthsClosure(const print_info_t* pi, ColumnWidths* widths) :
-    _pi(pi), _widths(widths) {}
+  MeasureColumnWidthsClosure(TableType table_type, const print_info_t* pi, ColumnWidths* widths) :
+    _table_type(table_type), _pi(pi), _widths(widths) {}
 
   void do_sample(const Sample* sample, const Sample* previous_sample) {
-    _widths->update_from_sample(sample, previous_sample, _pi);
+    _widths->update_from_sample(sample, _table_type, previous_sample, _pi);
   }
 };
 
 class PrintSamplesClosure : public SampleTable::Closure {
   outputStream* const _st;
+  const TableType _table_type;
   const print_info_t* const _pi;
   const ColumnWidths* const _widths;
 
 public:
 
-  PrintSamplesClosure(outputStream* st, const print_info_t* pi, const ColumnWidths* widths) :
-    _st(st), _pi(pi), _widths(widths) {}
+  PrintSamplesClosure(outputStream* st, TableType table_type, const print_info_t* pi, const ColumnWidths* widths) :
+    _st(st), _table_type(table_type), _pi(pi), _widths(widths) {}
 
   void do_sample(const Sample* sample, const Sample* previous_sample) {
-    print_one_sample(_st, sample, previous_sample, _widths, _pi);
+    print_one_sample(_st, sample, _table_type, previous_sample, _widths, _pi);
   }
 };
 
@@ -816,13 +860,13 @@ class SampleTables: public CHeapObj<mtInternal> {
   int _count;
   int _large_table_count;
 
-  static void print_table(const SampleTable* table, outputStream* st,
+  static void print_table(const SampleTable* table, TableType table_type, outputStream* st,
                           const ColumnWidths* widths, const print_info_t* pi) {
     if (table->is_empty()) {
       st->print_cr("(no samples)");
       return;
     }
-    PrintSamplesClosure prclos(st, pi, widths);
+    PrintSamplesClosure prclos(st, table_type, pi, widths);
     table->walk_table_locked(&prclos, !pi->reverse_ordering);
   }
 
@@ -853,13 +897,17 @@ class SampleTables: public CHeapObj<mtInternal> {
 public:
 
   SampleTables()
-    : _short_term_table(short_term_tablesize()),
-      _long_term_table(long_term_tablesize()),
-      _extremum_samples(Sample::num_values()),
-      _last_extremum_samples(Sample::num_values()),
+    : _short_term_table(short_term_tablesize(), false),
+      _long_term_table(long_term_tablesize(), true),
+      _extremum_samples(Sample::num_values(), false),
+      _last_extremum_samples(Sample::num_values(), false),
       _count(0),
       _large_table_count(MAX2(1, (int) (VitalsLongTermSampleIntervalMinutes * 60 / VitalsSampleInterval)))
   {}
+
+  bool is_next_sample_for_long_term() {
+    return ((_count + 1) % _large_table_count) == 0;
+  }
 
   void add_sample(const Sample* sample) {
     AutoLock autolock(&g_vitals_lock);
@@ -924,34 +972,34 @@ public:
 
       if (sample_now != nullptr) {
         ColumnWidths widths;
-        MeasureColumnWidthsClosure mcwclos(pi, &widths);
-        widths.update_from_sample(sample_now, nullptr, pi);
+        MeasureColumnWidthsClosure mcwclos(SINGLE, pi, &widths);
+        widths.update_from_sample(sample_now, SINGLE, nullptr, pi);
         st->print_cr("Now:");
         print_headers(st, &widths, pi);
-        print_one_sample(st, sample_now, nullptr, &widths, pi);
+        print_one_sample(st, sample_now, SINGLE, nullptr, &widths, pi);
         st->cr();
       }
 
       if (!_short_term_table.is_empty()) {
         ColumnWidths widths;
-        MeasureColumnWidthsClosure mcwclos(pi, &widths);
+        MeasureColumnWidthsClosure mcwclos(SHORT_TERM, pi, &widths);
         _short_term_table.walk_table_locked(&mcwclos);
 
         if (pi->csv == false) {
           print_time_span(st, VitalsShortTermTableHours * 3600);
         }
         print_headers(st, &widths, pi);
-        print_table(&_short_term_table, st, &widths, pi);
+        print_table(&_short_term_table, SHORT_TERM, st, &widths, pi);
         st->cr();
       }
 
       if (!_long_term_table.is_empty()) {
         ColumnWidths widths;
-        MeasureColumnWidthsClosure mcwclos(pi, &widths);
+        MeasureColumnWidthsClosure mcwclos(LONG_TERM, pi, &widths);
         _long_term_table.walk_table_locked(&mcwclos);
         print_time_span(st, VitalsLongTermTableDays * 24 * 3600);
         print_headers(st, &widths, pi);
-        print_table(&_long_term_table, st, &widths, pi);
+        print_table(&_long_term_table, LONG_TERM, st, &widths, pi);
         st->cr();
       }
 
@@ -959,13 +1007,13 @@ public:
         st->print_cr("Samples at extremes (+ marks a maximum, - marks a minimum)");
 
         ColumnWidths widths;
-        MeasureColumnWidthsClosure mcwclos(pi, &widths);
+        MeasureColumnWidthsClosure mcwclos(EXTREMUM, pi, &widths);
 
         for (Column const* column = ColumnList::the_list()->first(); column != nullptr; column = column->next()) {
           if (column->extremum() != NONE) {
             Sample* extremum_sample = _extremum_samples.sample_at(column->index());
             Sample* last_extremum_sample = _last_extremum_samples.sample_at(column->index());
-            widths.update_from_sample(extremum_sample, last_extremum_sample, pi, 1);
+            widths.update_from_sample(extremum_sample, EXTREMUM, last_extremum_sample, pi, 1);
           }
         }
 
@@ -975,7 +1023,7 @@ public:
           if (column->extremum() != NONE) {
             Sample* extremum_sample = _extremum_samples.sample_at(column->index());
             Sample* last_extremum_sample = _last_extremum_samples.sample_at(column->index());
-            print_one_sample(st, extremum_sample, last_extremum_sample, &widths, pi, column->index(),
+            print_one_sample(st, extremum_sample, EXTREMUM, last_extremum_sample, &widths, pi, column->index(),
                              column->extremum() == MIN ? "-" : "+");
           }
         }
@@ -992,13 +1040,13 @@ static SampleTables* g_all_tables = nullptr;
 /////////////// SAMPLING //////////////////////
 
 // Samples all values, but leaves timestamp unchanged
-static void sample_values(Sample* sample, bool avoid_locking) {
+static void sample_values(Sample* sample, bool avoid_locking, bool sample_for_long_term) {
   time_t t;
   ::time(&t);
   sample->set_timestamp(t);
   DEBUG_ONLY(sample->set_num(-1);)
-  sample_jvm_values(sample, avoid_locking);
-  sample_platform_values(sample);
+  sample_jvm_values(sample, avoid_locking, sample_for_long_term);
+  sample_platform_values(sample, sample_for_long_term);
 }
 
 class SamplerThread: public NamedThread {
@@ -1016,7 +1064,7 @@ class SamplerThread: public NamedThread {
     _sample->reset();
     DEBUG_ONLY(_sample->set_num(_samples_taken);)
     _samples_taken ++;
-    sample_values(_sample, VitalsLockFreeSampling);
+    sample_values(_sample, VitalsLockFreeSampling, g_all_tables->is_next_sample_for_long_term());
     g_all_tables->add_sample(_sample);
   }
 
@@ -1258,7 +1306,7 @@ static bool get_nmt_values(nmt_values_t* out) {
   return false;
 }
 
-void sample_jvm_values(Sample* sample, bool avoid_locking) {
+void sample_jvm_values(Sample* sample, bool avoid_locking, bool sample_for_long_term) {
 
   // Note: if avoid_locking=true, skip values which need JVM-side locking.
 
@@ -1419,7 +1467,7 @@ void print_report(outputStream* st, const print_info_t* pinfo) {
   Sample* sample_now = nullptr;
   if (info.sample_now && !info.csv) {
     sample_now = Sample::allocate();
-    sample_values(sample_now, true /* never lock for now sample - be safe */ );
+    sample_values(sample_now, true /* never lock for now sample - be safe */, true);
   }
 
   g_all_tables->print_all(st, &info, sample_now);

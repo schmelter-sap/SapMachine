@@ -34,7 +34,7 @@ bool platform_columns_initialize() {
   return true;
 }
 
-void sample_platform_values(Sample* record) {
+void sample_platform_values(Sample* record, bool sample_for_long_term) {
 }
 
 } // namespace sapmachine_vitals

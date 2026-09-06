@@ -40,6 +40,13 @@ namespace sapmachine_vitals {
   typedef uint64_t value_t;
 #define INVALID_VALUE   ((value_t)UINT64_MAX)
 
+  enum TableType {
+    SINGLE,
+    SHORT_TERM,
+    LONG_TERM,
+    EXTREMUM
+  };
+
   class Sample {
     DEBUG_ONLY(int _num;)
     time_t _timestamp;
@@ -82,7 +89,7 @@ namespace sapmachine_vitals {
     int _idx_cat;   // position in category
     int _idx_hdr;   // position under its header (if any, 0 otherwise)
 
-    int do_print(outputStream* os, value_t value, value_t last_value,
+    int do_print(outputStream* os, value_t value, TableType table_type, value_t last_value,
                  int last_value_age, const print_info_t* pi) const;
 
   protected:
@@ -91,10 +98,10 @@ namespace sapmachine_vitals {
 
     // Child classes implement this.
     // output stream can be nullptr; in that case, method shall return number of characters it would have printed.
-    virtual int do_print0(outputStream* os, value_t value,
+    virtual int do_print0(outputStream* os, value_t value, TableType table_type,
         value_t last_value, int last_value_age, const print_info_t* pi) const = 0;
     // Can be overridden by the implementation. By default writes the 64 bit value.
-    virtual int do_print_raw0(outputStream* os, value_t value) const;
+    virtual int do_print_raw0(outputStream* os, value_t value, TableType table_type) const;
 
   public:
 
@@ -104,11 +111,11 @@ namespace sapmachine_vitals {
     const char* description() const   { return _description; }
     Extremum    extremum() const      { return _extremum; }
 
-    void print_value(outputStream* os, value_t value, value_t last_value,
+    void print_value(outputStream* os, value_t value, TableType table_type, value_t last_value,
         int last_value_age, int min_width, const print_info_t* pi, char const* marker) const;
 
     // Returns the number of characters this value needs to be printed.
-    int calc_print_size(value_t value, value_t last_value,
+    int calc_print_size(value_t value, TableType table_type, value_t last_value,
         int last_value_age, const print_info_t* pi) const;
 
     // Returns the index (the position in the table) of this column.
@@ -126,7 +133,7 @@ namespace sapmachine_vitals {
   // Some standard column types
 
   class PlainValueColumn: public Column {
-    int do_print0(outputStream* os, value_t value, value_t last_value,
+    int do_print0(outputStream* os, value_t value, TableType table_type, value_t last_value,
         int last_value_age, const print_info_t* pi) const;
   public:
     PlainValueColumn(const char* category, const char* header, const char* name, const char* description, Extremum extremum)
@@ -135,7 +142,7 @@ namespace sapmachine_vitals {
   };
 
   class DeltaValueColumn: public Column {
-    int do_print0(outputStream* os, value_t value, value_t last_value,
+    int do_print0(outputStream* os, value_t value, TableType table_type, value_t last_value,
         int last_value_age, const print_info_t* pi) const;
   public:
     // only_positive: only positive deltas are shown, negative deltas are supressed
@@ -145,7 +152,7 @@ namespace sapmachine_vitals {
   };
 
   class MemorySizeColumn: public Column {
-    int do_print0(outputStream* os, value_t value, value_t last_value,
+    int do_print0(outputStream* os, value_t value, TableType table_type, value_t last_value,
         int last_value_age, const print_info_t* pi) const;
   public:
     MemorySizeColumn(const char* category, const char* header, const char* name, const char* description, Extremum extremum)
@@ -156,7 +163,7 @@ namespace sapmachine_vitals {
   };
 
   class DeltaMemorySizeColumn: public Column {
-    int do_print0(outputStream* os, value_t value, value_t last_value,
+    int do_print0(outputStream* os, value_t value, TableType table_type, value_t last_value,
         int last_value_age, const print_info_t* pi) const;
   public:
     DeltaMemorySizeColumn(const char* category, const char* header, const char* name, const char* description, Extremum extremum)
@@ -165,7 +172,7 @@ namespace sapmachine_vitals {
   };
 
   class TimeStampColumn: public Column {
-    int do_print0(outputStream* os, value_t value, value_t last_value,
+    int do_print0(outputStream* os, value_t value, TableType table_type, value_t last_value,
         int last_value_age, const print_info_t* pi) const;
   public:
     TimeStampColumn(const char* category, const char* header, const char* name, const char* description, Extremum extremum)
@@ -175,13 +182,14 @@ namespace sapmachine_vitals {
 
   // Special column which can handle the 3 load averages in the raw value.
   class LoadAverageColumn: public Column {
-    int do_print0(outputStream* os, value_t value, value_t last_value,
+    int do_print0(outputStream* os, value_t value, TableType table_type, value_t last_value,
         int last_value_age, const print_info_t* pi) const;
-    int do_print_raw0(outputStream* os, value_t value) const;
+    int do_print_raw0(outputStream* os, value_t value, TableType table_type) const;
   public:
     LoadAverageColumn(const char* category, const char* header, const char* name, const char* description, Extremum extremum)
       : Column(category, header, name, description, extremum)
     {}
+    void set_load_average(Sample* sample, double load_avg, bool sample_for_long_term);
   };
 
   ////// Legend: handles the legend
@@ -240,12 +248,12 @@ namespace sapmachine_vitals {
   // (a deactivated column is not shown in the table, but still shown in the legend, to
   //  given the user a hint about it)
   template <class ColumnType>
-  Column* define_column (
+  ColumnType* define_column (
       const char* const category, const char* const header,
       const char* const name, const char* const description,
       bool is_active, Extremum extremum = ColumnType::extremum_default())
   {
-    Column* c = nullptr;
+    ColumnType* c = nullptr;
     if (is_active) {
       c = new ColumnType(category, header, name, description, extremum);
       ColumnList::the_list()->add_column(c);
@@ -257,8 +265,8 @@ namespace sapmachine_vitals {
   // Ask platform to add platform specific columns
   bool platform_columns_initialize();
 
-  void sample_platform_values(Sample* sample);
-  void sample_jvm_values(Sample* sample, bool avoid_locking);
+  void sample_platform_values(Sample* sample, bool sample_for_long_term);
+  void sample_jvm_values(Sample* sample, bool avoid_locking, bool sample_for_long_term);
 
 }; // namespace sapmachine_vitals
 
