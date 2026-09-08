@@ -44,7 +44,7 @@ class CPUTimeColumn: public Column {
   long _clk_tck;
   int _num_cores;
 
-  int do_print0(outputStream* st, value_t value, value_t last_value,
+  int do_print0(outputStream* st, value_t value, TableType table_type, value_t last_value,
       int last_value_age, const print_info_t* pi) const {
     // CPU values may overflow, so the delta may be negative.
     if (last_value > value) {
@@ -106,7 +106,7 @@ static Column* g_col_system_num_threads = nullptr;
 static Column* g_col_system_num_procs_running = nullptr;
 static Column* g_col_system_num_procs_blocked = nullptr;
 
-static Column* g_col_system_load_avg = nullptr;
+static LoadAverageColumn* g_col_system_load_avg = nullptr;
 
 static bool g_show_cgroup_info = false;
 static Column* g_col_system_cgrp_limit_in_bytes = nullptr;
@@ -292,7 +292,7 @@ void sample_platform_values(Sample* sample, bool sample_for_long_term) {
   set_value_in_sample(g_col_system_num_procs_running, sample, OSWrapper::syst_tr());
   set_value_in_sample(g_col_system_num_procs_blocked, sample, OSWrapper::syst_tb());
 
-  set_value_in_sample(g_col_system_load_avg, sample, OSWrapper::syst_ldavg());
+  g_col_system_load_avg->set_load_average(sample, OSWrapper::load_average(), sample_for_long_term);
 
   // cgroups business
   if (g_show_cgroup_info) {

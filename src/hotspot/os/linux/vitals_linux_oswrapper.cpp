@@ -50,6 +50,7 @@ ALL_VALUES_DO(DEFINE_VARIABLE)
 #undef DEFINE_VARIABLE
 
 time_t OSWrapper::_last_update = 0;
+double OSWrapper::_load_average;
 
 static const int num_seconds_until_update = 1;
 
@@ -557,24 +558,32 @@ ALL_VALUES_DO(RESETVAL)
   }
 #endif // __GLIBC__
 
-  if (bf.read("/proc/loadavg")) {
-    float l1, l5, l15;
-    if (sscanf(bf.text(), "%f %f %f", &l1, &l5, &l15) == 3) {
-      // Convert to relative percentage-based loads, where 100 percent
-      // means the number of runnable threads equals the number of CPUs.
-      value_t rl1 = (value_t) MAX2(0.0, MIN2(65535.0, proc_scale_factor * l1));
-      value_t rl5 = (value_t) MAX2(0.0, MIN2(65535.0, proc_scale_factor * l5));
-      value_t rl15 = (value_t) MAX2(0.0, MIN2(65535.0, proc_scale_factor * l15));
-      // We put the three values into one, since we want to display
-      // the longer averaged one in table with coarser resolution.
-      _syst_ldavg = (rl1 << 32) | (rl5 << 16) | rl15;
-    } else {
-      _syst_ldavg = INVALID_VALUE;
-      static bool traced = false;
+  if ((VitalsSampleInterval < 30) && (_syst_tr != INVALID_VALUE)) {
+    // For short sample times we use the number of runnable and running threadsa
+    // to approximate the load average in that interval.
+    _load_average = MAX2(0.0, _syst_tr * proc_scale_factor);
+  } else {
+    if (bf.read("/proc/loadavg")) {
+      float l1, l5, l15;
+      if (sscanf(bf.text(), "%f %f %f", &l1, &l5, &l15) == 3) {
+        // Convert to relative percentage-based loads, where 100 percent
+        // means the number of runnable threads equals the number of CPUs.
+        // And use the load average value most representative for the interval
+        if (VitalsSampleInterval < 150) {
+          _load_average = MAX2(0.0, l1 * proc_scale_factor);
+        } else if (VitalsSampleInterval < 450) {
+          _load_average = MAX2(0.0, l5 * proc_scale_factor);
+        } else {
+          _load_average = MAX2(0.0, l15 * proc_scale_factor);
+        }
+      } else {
+        _load_average = -1.0;
+        static bool traced = false;
 
-      if (!traced) {
-        log_trace(vitals)("Could not parse /proc/loadavg: \n%s", bf.text());
-        traced = true;
+        if (!traced) {
+          log_trace(vitals)("Could not parse /proc/loadavg: \n%s", bf.text());
+          traced = true;
+        }
       }
     }
   }

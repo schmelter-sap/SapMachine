@@ -145,13 +145,7 @@ void sample_platform_values(Sample* sample, bool sample_for_long_term) {
   }
 
   if (has_loadavg) {
-    double load_avg = get_load_average();
-
-    if (load_avg < 0.0) {
-      set_value_in_sample(g_col_load_avg, sample, INVALID_VALUE);
-    } else {
-      g_col_load_avg->set_load_average(sample, load_avg, sample_for_long_term);
-    }
+    g_col_load_avg->set_load_average(sample, get_load_average(), sample_for_long_term);
   }
 }
 

@@ -600,15 +600,10 @@ int LoadAverageColumn::do_print0(outputStream* st, value_t value, TableType tabl
   if (value != INVALID_VALUE) {
     value_t load_average;
 
-    // Use the minute resolution until an age of 2.5 minutes
-    // and 5 minute resolution until an age of 7.5 minutes.
-    // The extremes use last_value_age, so they use the one minute average.
-    if (last_value_age <= 150) {
-      load_average = value >> 32;
-    } else if (last_value_age < 450) {
-      load_average = (value >> 16) & 0xffff;
-    } else {
+    if (table_type == LONG_TERM) {
       load_average = value & 0xffff;
+    } else {
+      load_average = (value >> 16) & 0xffff;
     }
 
     return printf_helper(st, UINT64_FORMAT, load_average);

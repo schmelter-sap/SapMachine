@@ -35,6 +35,7 @@ namespace sapmachine_vitals {
 class OSWrapper {
 
   static time_t _last_update;
+  static double _load_average;
 
 #define ALL_VALUES_DO(f) \
 		f(syst_phys) \
@@ -48,7 +49,6 @@ class OSWrapper {
 	  f(syst_t) \
 	  f(syst_tr) \
 	  f(syst_tb) \
-	  f(syst_ldavg) \
 	  f(syst_cpu_us) \
 	  f(syst_cpu_sy) \
 	  f(syst_cpu_id) \
@@ -90,6 +90,8 @@ public:
 ALL_VALUES_DO(DEFINE_GETTER)
 
 #undef DEFINE_GETTER
+
+  static double load_average() { return _load_average; }
 
   static void update_if_needed();
 
