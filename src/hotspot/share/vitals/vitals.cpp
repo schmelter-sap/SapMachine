@@ -1034,8 +1034,8 @@ public:
   virtual void run() {
     record_stack_base_and_size();
     for (;;) {
-      take_sample(g_all_tables->next_sample_is_for_long_term());
       os::naked_sleep(get_sample_interval_ms());
+      take_sample(g_all_tables->next_sample_is_for_long_term());
       if (_stop) {
         break;
       }
