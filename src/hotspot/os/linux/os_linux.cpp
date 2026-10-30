@@ -2487,7 +2487,7 @@ bool os::Linux::get_total_procs_and_threads(uint64_t* procs, uint64_t* threads) 
   size_t line_length = 256;
   char* line_buf = threads == nullptr ? nullptr : (char*) permit_forbidden_function::malloc(line_length);
   bool result = false;
-  if ((d != nullptr) && (line_buf != nullptr)) {
+  if (d != nullptr) {
     uint64_t procs_count = 0;
     uint64_t threads_count = 0;
     struct dirent* en = nullptr;
