@@ -2048,6 +2048,13 @@ bool MallocStatisticImpl::dump(outputStream* msg_stream, outputStream* dump_stre
       lockedTime.start();
       expected_size = map._size;
 
+      if (expected_size == 0) {
+        entries[idx] = nullptr;
+        nr_of_entries[idx] = 0;
+        lockedTime.stop();
+        continue;
+      }
+
       entries[idx] = (StatEntryCopy*) real_malloc_funcs->malloc(sizeof(StatEntryCopy) * expected_size);
 
       if (entries[idx] != nullptr) {
@@ -2088,7 +2095,12 @@ bool MallocStatisticImpl::dump(outputStream* msg_stream, outputStream* dump_stre
 
     // See if it makes sense to trim. We have to shave of enough and don't
     // trim anyway after sorting.
-    if ((pos < expected_size - 16) && (pos < max_entries)) {
+    if (pos == 0) {
+      real_malloc_funcs->free(entries[idx]);
+      entries[idx] = nullptr;
+      nr_of_entries[idx] = 0;
+      continue;
+    } else if ((pos < expected_size - 16) && (pos < max_entries)) {
       void* result = real_malloc_funcs->realloc(entries[idx], pos * sizeof(StatEntryCopy));
 
       if (result != nullptr) {
