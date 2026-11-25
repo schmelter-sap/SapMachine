@@ -2099,6 +2099,7 @@ bool MallocStatisticImpl::dump(outputStream* msg_stream, outputStream* dump_stre
       real_malloc_funcs->free(entries[idx]);
       entries[idx] = nullptr;
       nr_of_entries[idx] = 0;
+      total_entries += expected_size;
       continue;
     } else if ((pos < expected_size - 16) && (pos < max_entries)) {
       void* result = real_malloc_funcs->realloc(entries[idx], pos * sizeof(StatEntryCopy));
