@@ -305,11 +305,12 @@ public class MallocHooksTest {
 
       for (int i = 0; i < nrOfEnables; ++i) {
           String[] args;
+          String stack_depth = "-stack-depth=" + (int) (Math.random() * 28 + 2);
 
           if ((i & 1) == 0) {
-              args = new String[] {"-force"};
+              args = new String[] {"-force", stack_depth};
           } else {
-              args = new String[] {"-force", "-track-free"};
+              args = new String[] {"-force", "-track-free", stack_depth};
           }
 
           server.invoke(name, "malloctraceEnable", new Object[] {args}, signature);
