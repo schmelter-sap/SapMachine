@@ -198,16 +198,17 @@ static void test_no_recursive_calls() {
     funcs->posix_memalign(&ptr, 1024, 0);
     funcs->posix_memalign(&ptr, 1024, 12);
 
-    // MacOSX has no memalign and aligned_alloc.
+    // MacOSX has no memalignc.
 #if !defined(__APPLE__)
     write_string("Testing memalign\n");
     funcs->memalign(1024, 0);
     funcs->memalign(1024, 12);
+#endif
 
     write_string("Testing aligned_alloc\n");
     funcs->aligned_alloc(1024, 0);
-    funcs->aligned_alloc(1024, 12);
-#endif
+    funcs->aligned_alloc(32, 32);
+    funcs->aligned_alloc(1024, 2048);
 
     // Musl has no valloc function.
 #if defined(__GLIBC__) || defined(__APPLE__)

@@ -569,13 +569,7 @@ DYLD_INTERPOSE(REPLACE_NAME(calloc), calloc)
 DYLD_INTERPOSE(REPLACE_NAME(realloc), realloc)
 DYLD_INTERPOSE(REPLACE_NAME(free), free)
 DYLD_INTERPOSE(REPLACE_NAME(posix_memalign), posix_memalign)
-
-// We compile for 10.12 but aligned_alloc is only available in 10.15 and up
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability-new"
 DYLD_INTERPOSE(REPLACE_NAME(aligned_alloc), aligned_alloc)
-#pragma clang diagnostic pop
-
 DYLD_INTERPOSE(REPLACE_NAME(valloc), valloc)
 
 #endif
