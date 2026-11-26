@@ -1242,8 +1242,6 @@ StatEntry*  MallocStatisticImpl::record_allocation_size(size_t to_add, int nr_of
   nr_of_frames = MAX2(nr_of_frames - FRAMES_TO_SKIP, 0);
   frames += FRAMES_TO_SKIP;
 
-  assert(nr_of_frames <= _max_frames, "Overflow");
-
   uint64_t hash = hash_for_frames(nr_of_frames, frames);
   int idx = hash & (NR_OF_STACK_MAPS - 1);
   assert((idx >= 0) && (idx < NR_OF_STACK_MAPS), "invalid map index");
