@@ -199,6 +199,7 @@ public:
   void free(void* ptr);
   size_t allocated();
   size_t unused();
+  size_t size();
 };
 
 Allocator::Allocator(size_t allocation_size, int entries_per_chunk) :
@@ -277,6 +278,10 @@ size_t Allocator::unused() {
 #endif
 
   return _allocation_size * _free_entries;
+}
+
+size_t Allocator::size() {
+  return _allocation_size;
 }
 
 class AddressHashSet {
@@ -1272,6 +1277,11 @@ StatEntry*  MallocStatisticImpl::record_allocation_size(size_t to_add, int nr_of
   }
 
   // Need a new entry. Fail silently if we don't get the memory.
+  if (map._alloc->size() < StatEntry::size(nr_of_frames)) {
+    // Changed the max frames concurrently, so the entry would overflow. Better bail out.
+    return nullptr;
+  }
+
   void* mem = map._alloc->allocate();
 
   if (mem != nullptr) {
