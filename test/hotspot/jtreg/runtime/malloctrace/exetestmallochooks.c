@@ -198,7 +198,7 @@ static void test_no_recursive_calls() {
     funcs->posix_memalign(&ptr, 1024, 0);
     funcs->posix_memalign(&ptr, 1024, 12);
 
-    // MacOSX has no memalignc.
+    // MacOSX has no memalign.
 #if !defined(__APPLE__)
     write_string("Testing memalign\n");
     funcs->memalign(1024, 0);
