@@ -84,7 +84,7 @@ static real_malloc_funcs_t impl = {
   free,
   posix_memalign,
   NULL,
-  NULL,
+  aligned_alloc,
   valloc,
   NULL,
   (malloc_size_func_t*) malloc_size
