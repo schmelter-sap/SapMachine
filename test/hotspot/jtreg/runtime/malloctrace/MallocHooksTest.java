@@ -307,7 +307,7 @@ public class MallocHooksTest {
           String[] args;
           String stack_depth = "-stack-depth=" + (int) (Math.random() * 28 + 2);
 
-          if ((i & 1) == 0) {
+          if (Math.random() < 0.5) {
               args = new String[] {"-force", stack_depth};
           } else {
               args = new String[] {"-force", "-track-free", stack_depth};
