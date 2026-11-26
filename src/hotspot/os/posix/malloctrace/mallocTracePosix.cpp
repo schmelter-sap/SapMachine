@@ -864,7 +864,7 @@ ALWAYSINLINE int MallocStatisticImpl::capture_stack(address* frames, address rea
   if (nr_of_frames < 2) {
     frames[0] = real_func;
     frames[1] = caller;
-    nr_of_frames = MAX2(2, _max_frames);
+    nr_of_frames = MIN2(2, _max_frames);
   }
 
   if (_detailed_stats) {
